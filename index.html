@@ -212,21 +212,39 @@
 </head>
 <body>
 
-    <div class="header">
-        <h1>Saldo de Pontos</h1>
-        <div class="score-display" id="totalPoints">0</div>
-        <div>
-            <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
-            <button id="toggleHistoryBtn" class="btn-history" onclick="toggleHistory()">Ver Detalhes</button>
-        </div>
-        
-        <!-- Painel de Histórico (Oculto por padrão) -->
-        <div id="historyPanel" class="history-panel" style="display: none;">
-            <ul class="history-list" id="historyList"></ul>
-        </div>
+    <!-- TELA DE LOGIN -->
+    <div id="loginContent" class="header" style="text-align: center; margin-top: 50px;">
+        <h1 style="font-size: 2em; margin-bottom: 10px;">Life Gamification</h1>
+        <p style="color: var(--text-muted); margin-bottom: 30px;">Faça login para sincronizar seus pontos e tarefas na nuvem.</p>
+        <button class="btn-task" style="font-size: 1.2em; padding: 12px 24px;" onclick="login()">Entrar com Google</button>
     </div>
 
-    <div class="container">
+    <!-- APP PRINCIPAL (Oculto inicialmente) -->
+    <div id="appContent" style="display: none;">
+        <div class="header">
+            <!-- Cabeçalho com botão de Sair -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+                <h1 style="margin: 0; font-size: 1.5em;">Life Gamification</h1>
+                <div style="font-size: 0.85em; color: var(--text-muted);">
+                    <span id="userEmail"></span>
+                    <button class="btn-delete" style="padding: 4px 8px; margin-left: 10px;" onclick="logout()">Sair</button>
+                </div>
+            </div>
+            
+            <h2 style="margin: 0; font-size: 1.2em; color: var(--text-muted);">Saldo de Pontos</h2>
+            <div class="score-display" id="totalPoints">0</div>
+            <div>
+                <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
+                <button id="toggleHistoryBtn" class="btn-history" onclick="toggleHistory()">Ver Detalhes</button>
+            </div>
+            
+            <!-- Painel de Histórico (Oculto por padrão) -->
+            <div id="historyPanel" class="history-panel" style="display: none;">
+                <ul class="history-list" id="historyList"></ul>
+            </div>
+        </div>
+
+        <div class="container">
         <!-- TAREFAS -->
         <div class="panel">
             <h2>Tarefas (Gerar Pontos)</h2>
@@ -249,8 +267,29 @@
             </form>
         </div>
     </div>
+    </div> <!-- Fim do appContent -->
+
+    <!-- Importação do Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
     <script>
+        // Configuração do Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyAAXavuACBZMB0gn8v_kiXTJHWNeRfq0TM",
+            authDomain: "life-gamification-665a1.firebaseapp.com",
+            projectId: "life-gamification-665a1",
+            storageBucket: "life-gamification-665a1.firebasestorage.app",
+            messagingSenderId: "480270492857",
+            appId: "1:480270492857:web:99c137382072f22795e768"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        let userDocRef = null;
+
         // Dados Iniciais Baseados nas Planilhas
         const defaultTasks = [
             { id: 1, name: "1 hora de treino", points: 100 },
@@ -281,23 +320,54 @@
             history: []
         };
 
-        // Inicialização com LocalStorage
-        function init() {
-            const savedState = localStorage.getItem('gamificationState');
-            if (savedState) {
-                state = JSON.parse(savedState);
-                if (!state.history) state.history = []; // Migração para estado antigo
+        // Monitor de Login e Sincronização em Tempo Real
+        auth.onAuthStateChanged((user) => {
+            const loginContent = document.getElementById('loginContent');
+            const appContent = document.getElementById('appContent');
+            
+            if (user) {
+                // Usuário logado
+                loginContent.style.display = 'none';
+                appContent.style.display = 'block';
+                document.getElementById('userEmail').innerText = user.email;
+                
+                userDocRef = db.collection('users').doc(user.uid);
+                
+                // Ouve as mudanças da nuvem em tempo real
+                userDocRef.onSnapshot((doc) => {
+                    if (doc.exists) {
+                        state = doc.data();
+                        if (!state.history) state.history = [];
+                    } else {
+                        state.tasks = [...defaultTasks];
+                        state.rewards = [...defaultRewards];
+                        state.history = [];
+                        state.totalPoints = 0;
+                        saveState();
+                    }
+                    render();
+                });
             } else {
-                state.tasks = [...defaultTasks];
-                state.rewards = [...defaultRewards];
-                state.history = [];
-                saveState();
+                // Usuário deslogado
+                loginContent.style.display = 'block';
+                appContent.style.display = 'none';
+                userDocRef = null;
             }
-            render();
+        });
+
+        function login() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(err => alert("Erro ao fazer login: " + err.message));
+        }
+
+        function logout() {
+            auth.signOut();
         }
 
         function saveState() {
-            localStorage.setItem('gamificationState', JSON.stringify(state));
+            if (userDocRef) {
+                userDocRef.set(state);
+            }
         }
 
         // Ações de Pontuação
@@ -448,8 +518,7 @@
             }
         }
 
-        // Iniciar app
-        init();
+        // O app agora inicia automaticamente pelo auth.onAuthStateChanged
     </script>
 </body>
 </html>
