@@ -151,6 +151,60 @@
         input[type="number"] { width: 80px; }
         .btn-add { background: var(--accent-green); color: white; }
 
+        .btn-history {
+            margin-top: 10px;
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--text-muted);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85em;
+            transition: all 0.2s;
+            margin-left: 10px;
+        }
+        .btn-history:hover {
+            background: #444;
+        }
+        .history-panel {
+            margin-top: 20px;
+            background: #222;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            text-align: left;
+            border: 1px solid var(--border);
+        }
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.9em;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 5px;
+            border-bottom: 1px solid #333;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .history-date {
+            color: var(--text-muted);
+            font-size: 0.8em;
+            width: 130px;
+        }
+        .history-name {
+            flex-grow: 1;
+            padding: 0 10px;
+        }
+        .history-points.earn { color: var(--accent-green); font-weight: bold; }
+        .history-points.spend { color: var(--accent-red); font-weight: bold; }
+
         @media (max-width: 768px) {
             .container { grid-template-columns: 1fr; }
         }
@@ -161,7 +215,15 @@
     <div class="header">
         <h1>Saldo de Pontos</h1>
         <div class="score-display" id="totalPoints">0</div>
-        <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
+        <div>
+            <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
+            <button id="toggleHistoryBtn" class="btn-history" onclick="toggleHistory()">Ver Detalhes</button>
+        </div>
+        
+        <!-- Painel de Histórico (Oculto por padrão) -->
+        <div id="historyPanel" class="history-panel" style="display: none;">
+            <ul class="history-list" id="historyList"></ul>
+        </div>
     </div>
 
     <div class="container">
@@ -215,7 +277,8 @@
         let state = {
             totalPoints: 0,
             tasks: [],
-            rewards: []
+            rewards: [],
+            history: []
         };
 
         // Inicialização com LocalStorage
@@ -223,9 +286,11 @@
             const savedState = localStorage.getItem('gamificationState');
             if (savedState) {
                 state = JSON.parse(savedState);
+                if (!state.history) state.history = []; // Migração para estado antigo
             } else {
                 state.tasks = [...defaultTasks];
                 state.rewards = [...defaultRewards];
+                state.history = [];
                 saveState();
             }
             render();
@@ -236,18 +301,26 @@
         }
 
         // Ações de Pontuação
-        function completeTask(points) {
-            state.totalPoints += points;
-            saveState();
-            render();
-        }
-
-        function redeemReward(points) {
-            if (state.totalPoints >= points) {
-                state.totalPoints -= points;
+        function completeTask(taskId) {
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task) {
+                state.totalPoints += task.points;
+                const date = new Date().toLocaleString('pt-BR');
+                state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date });
                 saveState();
                 render();
-            } else {
+            }
+        }
+
+        function redeemReward(rewardId) {
+            const reward = state.rewards.find(r => r.id === rewardId);
+            if (reward && state.totalPoints >= reward.points) {
+                state.totalPoints -= reward.points;
+                const date = new Date().toLocaleString('pt-BR');
+                state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date });
+                saveState();
+                render();
+            } else if (reward) {
                 alert("Pontos insuficientes!");
             }
         }
@@ -256,6 +329,7 @@
             const confirmed = confirm("⚠️ AVISO DE SEGURANÇA ⚠️\n\nTem certeza que deseja zerar TODOS os seus pontos? Essa ação não poderá ser desfeita.");
             if (confirmed) {
                 state.totalPoints = 0;
+                state.history = [];
                 saveState();
                 render();
             }
@@ -311,7 +385,7 @@
                         <span class="item-points">+${task.points} Pts</span>
                     </div>
                     <div class="action-group">
-                        <button class="btn-task" onclick="completeTask(${task.points})">Feito</button>
+                        <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
                         <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
                     </div>
                 `;
@@ -331,12 +405,47 @@
                         <span class="item-points">-${reward.points} Pts</span>
                     </div>
                     <div class="action-group">
-                        <button class="btn-reward" ${!canAfford ? 'disabled' : ''} onclick="redeemReward(${reward.points})">Resgatar</button>
+                        <button class="btn-reward" ${!canAfford ? 'disabled' : ''} onclick="redeemReward(${reward.id})">Resgatar</button>
                         <button class="btn-delete" onclick="deleteReward(${reward.id})" title="Remover Recompensa">X</button>
                     </div>
                 `;
                 rewardList.appendChild(li);
             });
+
+            // Renderizar Histórico
+            const historyList = document.getElementById('historyList');
+            if (historyList) {
+                historyList.innerHTML = '';
+                if (!state.history || state.history.length === 0) {
+                    historyList.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum histórico ainda.</li>';
+                } else {
+                    state.history.forEach(log => {
+                        const li = document.createElement('li');
+                        li.className = 'history-item';
+                        const isEarn = log.type === 'earn';
+                        li.innerHTML = `
+                            <span class="history-date">${log.date}</span>
+                            <span class="history-name">${log.name}</span>
+                            <span class="history-points ${isEarn ? 'earn' : 'spend'}">
+                                ${isEarn ? '+' : '-'}${log.points} Pts
+                            </span>
+                        `;
+                        historyList.appendChild(li);
+                    });
+                }
+            }
+        }
+
+        function toggleHistory() {
+            const panel = document.getElementById('historyPanel');
+            const btn = document.getElementById('toggleHistoryBtn');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                btn.innerText = 'Ocultar Detalhes';
+            } else {
+                panel.style.display = 'none';
+                btn.innerText = 'Ver Detalhes';
+            }
         }
 
         // Iniciar app
