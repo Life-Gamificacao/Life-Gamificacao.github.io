@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Life Gamification</title>
+    
+    <!-- Configurações para PWA (App no celular) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e1e1e">
+    
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #2d2d2d;
+            --text-main: #f0f0f0;
+            --text-muted: #aaaaaa;
+            --accent-green: #4caf50;
+            --accent-blue: #2196f3;
+            --accent-red: #f44336;
+            --border: #444;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: var(--panel-bg);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+        .score-display {
+            font-size: 3em;
+            font-weight: bold;
+            color: var(--accent-green);
+        }
+        .btn-reset {
+            margin-top: 10px;
+            background: transparent;
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }
+        .btn-reset:hover {
+            background: var(--accent-red);
+            color: white;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        h2 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .item-list {
+            list-style: none;
+            padding: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #333;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 4px solid var(--accent-blue);
+        }
+        .item.reward {
+            border-left: 4px solid var(--accent-red);
+        }
+        .item-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .item-title {
+            font-weight: bold;
+        }
+        .item-points {
+            font-size: 0.85em;
+            color: var(--text-muted);
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.8; }
+        .btn-task { background: var(--accent-blue); color: white; }
+        .btn-reward { background: var(--accent-red); color: white; }
+        .btn-reward:disabled { background: #555; cursor: not-allowed; }
+        
+        .btn-delete {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+        }
+        .btn-delete:hover {
+            background: var(--accent-red);
+            color: white;
+            border-color: var(--accent-red);
+        }
+        .action-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .add-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+        }
+        input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: #222;
+            color: white;
+        }
+        input[type="text"] { flex-grow: 1; }
+        input[type="number"] { width: 80px; }
+        .btn-add { background: var(--accent-green); color: white; }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Saldo de Pontos</h1>
+        <div class="score-display" id="totalPoints">0</div>
+        <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
+    </div>
+
+    <div class="container">
+        <!-- TAREFAS -->
+        <div class="panel">
+            <h2>Tarefas (Gerar Pontos)</h2>
+            <ul class="item-list" id="taskList"></ul>
+            <form class="add-form" id="formTask">
+                <input type="text" id="taskName" placeholder="Nova Tarefa" required>
+                <input type="number" id="taskPoints" placeholder="Pts" required min="1">
+                <button type="submit" class="btn-add">+</button>
+            </form>
+        </div>
+
+        <!-- RECOMPENSAS -->
+        <div class="panel">
+            <h2>Recompensas (Gastar Pontos)</h2>
+            <ul class="item-list" id="rewardList"></ul>
+            <form class="add-form" id="formReward">
+                <input type="text" id="rewardName" placeholder="Nova Recompensa" required>
+                <input type="number" id="rewardPoints" placeholder="Custo" required min="1">
+                <button type="submit" class="btn-add">+</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Dados Iniciais Baseados nas Planilhas
+        const defaultTasks = [
+            { id: 1, name: "1 hora de treino", points: 100 },
+            { id: 2, name: "30 minutos estudando Inglês", points: 50 },
+            { id: 3, name: "1 hora estudando graduação", points: 20 },
+            { id: 4, name: "Ligar para familiares", points: 10 },
+            { id: 5, name: "Guardar R$200 na poupança", points: 200 },
+            { id: 6, name: "Postar 2 vídeos(Fabi)", points: 20 },
+            { id: 7, name: "Postar 5 shorts(WorksTech)", points: 20 },
+            { id: 8, name: "Postar 1 video(Works)", points: 20 }
+        ];
+
+        const defaultRewards = [
+            { id: 1, name: "Cinena + Pipoca", points: 800 },
+            { id: 2, name: "Restaurante", points: 1500 },
+            { id: 3, name: "Viagem RN", points: 5000 },
+            { id: 4, name: "Viagem Nacional", points: 20000 },
+            { id: 5, name: "Viagem Internacional", points: 1000000 },
+            { id: 6, name: "1 Roupa", points: 1200 },
+            { id: 7, name: "1 Pedido Ifood (Lanche)", points: 800 }
+        ];
+
+        // Estado da Aplicação
+        let state = {
+            totalPoints: 0,
+            tasks: [],
+            rewards: []
+        };
+
+        // Inicialização com LocalStorage
+        function init() {
+            const savedState = localStorage.getItem('gamificationState');
+            if (savedState) {
+                state = JSON.parse(savedState);
+            } else {
+                state.tasks = [...defaultTasks];
+                state.rewards = [...defaultRewards];
+                saveState();
+            }
+            render();
+        }
+
+        function saveState() {
+            localStorage.setItem('gamificationState', JSON.stringify(state));
+        }
+
+        // Ações de Pontuação
+        function completeTask(points) {
+            state.totalPoints += points;
+            saveState();
+            render();
+        }
+
+        function redeemReward(points) {
+            if (state.totalPoints >= points) {
+                state.totalPoints -= points;
+                saveState();
+                render();
+            } else {
+                alert("Pontos insuficientes!");
+            }
+        }
+
+        function resetPoints() {
+            const confirmed = confirm("⚠️ AVISO DE SEGURANÇA ⚠️\n\nTem certeza que deseja zerar TODOS os seus pontos? Essa ação não poderá ser desfeita.");
+            if (confirmed) {
+                state.totalPoints = 0;
+                saveState();
+                render();
+            }
+        }
+
+        // Ações de Exclusão
+        function deleteTask(id) {
+            state.tasks = state.tasks.filter(task => task.id !== id);
+            saveState();
+            render();
+        }
+
+        function deleteReward(id) {
+            state.rewards = state.rewards.filter(reward => reward.id !== id);
+            saveState();
+            render();
+        }
+
+        // Adicionar Novos Itens
+        document.getElementById('formTask').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('taskName').value;
+            const points = parseInt(document.getElementById('taskPoints').value);
+            state.tasks.push({ id: Date.now(), name, points });
+            saveState();
+            this.reset();
+            render();
+        });
+
+        document.getElementById('formReward').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('rewardName').value;
+            const points = parseInt(document.getElementById('rewardPoints').value);
+            state.rewards.push({ id: Date.now(), name, points });
+            saveState();
+            this.reset();
+            render();
+        });
+
+        // Renderização da Interface
+        function render() {
+            document.getElementById('totalPoints').innerText = state.totalPoints;
+
+            // Renderizar Tarefas
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '';
+            state.tasks.forEach(task => {
+                const li = document.createElement('li');
+                li.className = 'item';
+                li.innerHTML = `
+                    <div class="item-info">
+                        <span class="item-title">${task.name}</span>
+                        <span class="item-points">+${task.points} Pts</span>
+                    </div>
+                    <div class="action-group">
+                        <button class="btn-task" onclick="completeTask(${task.points})">Feito</button>
+                        <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
+                    </div>
+                `;
+                taskList.appendChild(li);
+            });
+
+            // Renderizar Recompensas
+            const rewardList = document.getElementById('rewardList');
+            rewardList.innerHTML = '';
+            state.rewards.forEach(reward => {
+                const canAfford = state.totalPoints >= reward.points;
+                const li = document.createElement('li');
+                li.className = 'item reward';
+                li.innerHTML = `
+                    <div class="item-info">
+                        <span class="item-title">${reward.name}</span>
+                        <span class="item-points">-${reward.points} Pts</span>
+                    </div>
+                    <div class="action-group">
+                        <button class="btn-reward" ${!canAfford ? 'disabled' : ''} onclick="redeemReward(${reward.points})">Resgatar</button>
+                        <button class="btn-delete" onclick="deleteReward(${reward.id})" title="Remover Recompensa">X</button>
+                    </div>
+                `;
+                rewardList.appendChild(li);
+            });
+        }
+
+        // Iniciar app
+        init();
+    </script>
+</body>
+</html>
