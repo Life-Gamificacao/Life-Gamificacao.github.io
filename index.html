@@ -287,10 +287,20 @@
         <div class="panel">
             <h2>Recompensas (Gastar Pontos)</h2>
             <ul class="item-list" id="rewardList"></ul>
-            <form class="add-form" id="formReward">
-                <input type="text" id="rewardName" placeholder="Nova Recompensa" required>
-                <input type="number" id="rewardPoints" placeholder="Custo" required min="1">
-                <button type="submit" class="btn-add">+</button>
+            <form class="add-form" id="formReward" style="flex-direction: column;">
+                <div style="display: flex; gap: 10px; width: 100%;">
+                    <input type="text" id="rewardName" placeholder="Nova Recompensa" required style="flex-grow: 1;">
+                    <input type="number" id="rewardPoints" placeholder="Custo (Pts)" required min="0" style="width: 80px;">
+                </div>
+                
+                <div style="margin-top: 10px; font-size: 0.9em; color: var(--text-muted);">
+                    <label>Exige gastar tarefas específicas? (Opcional):</label>
+                    <div id="rewardPrereqs" style="max-height: 100px; overflow-y: auto; background: #222; border: 1px solid var(--border); padding: 5px; border-radius: 4px; margin-top: 5px;">
+                        <!-- O JavaScript vai preencher os checkboxes aqui -->
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-add" style="width: 100%; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px;">Adicionar Recompensa</button>
             </form>
         </div>
     </div>
@@ -394,6 +404,7 @@
             const task = state.tasks.find(t => t.id === taskId);
             if (task) {
                 state.totalPoints += task.points;
+                task.completions = (task.completions || 0) + 1;
                 const date = new Date().toLocaleString('pt-BR');
                 state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date });
                 saveState();
@@ -403,14 +414,32 @@
 
         function redeemReward(rewardId) {
             const reward = state.rewards.find(r => r.id === rewardId);
-            if (reward && state.totalPoints >= reward.points) {
-                state.totalPoints -= reward.points;
-                const date = new Date().toLocaleString('pt-BR');
-                state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date });
-                saveState();
-                render();
-            } else if (reward) {
-                alert("Pontos insuficientes!");
+            if (reward) {
+                let hasAllPrereqs = true;
+                if (reward.prereqs && reward.prereqs.length > 0) {
+                    reward.prereqs.forEach(prereqId => {
+                        const t = state.tasks.find(t => t.id === parseInt(prereqId));
+                        if (!t || (t.completions || 0) < 1) hasAllPrereqs = false;
+                    });
+                }
+                
+                if (state.totalPoints >= reward.points && hasAllPrereqs) {
+                    state.totalPoints -= reward.points;
+                    
+                    if (reward.prereqs) {
+                        reward.prereqs.forEach(prereqId => {
+                            const t = state.tasks.find(t => t.id === parseInt(prereqId));
+                            if (t) t.completions -= 1;
+                        });
+                    }
+                    
+                    const date = new Date().toLocaleString('pt-BR');
+                    state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date });
+                    saveState();
+                    render();
+                } else {
+                    alert("Você não possui os requisitos (pontos ou tarefas) para esta recompensa!");
+                }
             }
         }
 
@@ -461,7 +490,11 @@
             e.preventDefault();
             const name = document.getElementById('rewardName').value;
             const points = parseInt(document.getElementById('rewardPoints').value);
-            state.rewards.push({ id: Date.now(), name, points });
+            
+            const checkboxes = document.querySelectorAll('input[name="prereq"]:checked');
+            const prereqs = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            
+            state.rewards.push({ id: Date.now(), name, points, prereqs });
             saveState();
             this.reset();
             render();
@@ -513,20 +546,63 @@
                 }
             });
 
+            // Atualizar formulário de recompensas (Pré-requisitos)
+            const prereqContainer = document.getElementById('rewardPrereqs');
+            if (prereqContainer) {
+                prereqContainer.innerHTML = '';
+                if (state.tasks.length === 0) {
+                    prereqContainer.innerHTML = '<span style="color: #666;">Nenhuma tarefa cadastrada.</span>';
+                } else {
+                    state.tasks.forEach(task => {
+                        const label = document.createElement('label');
+                        label.style.display = 'block';
+                        label.style.marginBottom = '5px';
+                        label.style.cursor = 'pointer';
+                        const checkedCount = task.completions || 0;
+                        label.innerHTML = `<input type="checkbox" name="prereq" value="${task.id}" style="margin-right: 5px;"> ${task.name} <span style="color: var(--accent-blue); font-size: 0.8em;">(Saldo: ${checkedCount})</span>`;
+                        prereqContainer.appendChild(label);
+                    });
+                }
+            }
+
             // Renderizar Recompensas
             const rewardList = document.getElementById('rewardList');
             rewardList.innerHTML = '';
             state.rewards.forEach(reward => {
-                const canAfford = state.totalPoints >= reward.points;
+                let missingPrereqs = [];
+                let hasAllPrereqs = true;
+                
+                if (reward.prereqs && reward.prereqs.length > 0) {
+                    reward.prereqs.forEach(prereqId => {
+                        const t = state.tasks.find(t => t.id === parseInt(prereqId));
+                        if (!t || (t.completions || 0) < 1) {
+                            hasAllPrereqs = false;
+                            missingPrereqs.push(t ? t.name : "Tarefa excluída");
+                        }
+                    });
+                }
+                
+                const canAffordPoints = state.totalPoints >= reward.points;
+                const canRedeem = canAffordPoints && hasAllPrereqs;
+                
+                let statusText = '';
+                if (!canRedeem) {
+                    let reasons = [];
+                    if (!canAffordPoints) reasons.push('Pontos');
+                    if (!hasAllPrereqs) reasons.push('Tarefas: ' + missingPrereqs.join(', '));
+                    statusText = `<div style="font-size: 0.75em; color: var(--accent-red); margin-top: 5px;">Falta: ${reasons.join(' | ')}</div>`;
+                }
+
                 const li = document.createElement('li');
                 li.className = 'item reward';
                 li.innerHTML = `
                     <div class="item-info">
                         <span class="item-title">${reward.name}</span>
                         <span class="item-points">-${reward.points} Pts</span>
+                        ${statusText}
                     </div>
                     <div class="action-group">
-                        <button class="btn-reward" ${!canAfford ? 'disabled' : ''} onclick="redeemReward(${reward.id})">Resgatar</button>
+                        <button class="btn-reward" ${!canRedeem ? 'disabled' : ''} onclick="redeemReward(${reward.id})">Resgatar</button>
                         <button class="btn-delete" onclick="deleteReward(${reward.id})" title="Remover Recompensa">X</button>
                     </div>
                 `;
