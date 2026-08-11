@@ -462,15 +462,19 @@
 
         // Ações de Exclusão
         function deleteTask(id) {
-            state.tasks = state.tasks.filter(task => task.id !== id);
-            saveState();
-            render();
+            if (confirm("Tem certeza que deseja apagar esta tarefa?")) {
+                state.tasks = state.tasks.filter(task => task.id !== id);
+                saveState();
+                render();
+            }
         }
 
         function deleteReward(id) {
-            state.rewards = state.rewards.filter(reward => reward.id !== id);
-            saveState();
-            render();
+            if (confirm("Tem certeza que deseja apagar esta recompensa?")) {
+                state.rewards = state.rewards.filter(reward => reward.id !== id);
+                saveState();
+                render();
+            }
         }
 
         // Adicionar Novos Itens
