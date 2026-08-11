@@ -82,13 +82,30 @@
         }
         .item {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            align-items: flex-start;
             padding: 12px;
             background: #333;
             margin-bottom: 8px;
             border-radius: 4px;
             border-left: 4px solid var(--accent-blue);
+        }
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+        .item-notes {
+            display: none;
+            width: 100%;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #555;
+            color: var(--text-muted);
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            box-sizing: border-box;
         }
         .item.reward {
             border-left: 4px solid var(--accent-red);
@@ -250,16 +267,19 @@
         <div class="panel">
             <h2>Tarefas (Gerar Pontos)</h2>
             <ul class="item-list" id="taskList"></ul>
-            <form class="add-form" id="formTask">
-                <input type="text" id="taskName" placeholder="Nova Tarefa" required style="flex-grow: 1;">
-                <input type="number" id="taskPoints" placeholder="Pts" required min="1" style="width: 70px;">
-                <select id="taskFrequency" required style="padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
-                    <option value="Diária">Diária</option>
-                    <option value="Semanal">Semanal</option>
-                    <option value="Quinzenal">Quinzenal</option>
-                    <option value="Mensal">Mensal</option>
-                </select>
-                <button type="submit" class="btn-add">+</button>
+            <form class="add-form" id="formTask" style="flex-direction: column;">
+                <div style="display: flex; gap: 10px; width: 100%;">
+                    <input type="text" id="taskName" placeholder="Nova Tarefa" required style="flex-grow: 1;">
+                    <input type="number" id="taskPoints" placeholder="Pts" required min="1" style="width: 70px;">
+                    <select id="taskFrequency" required style="padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
+                        <option value="Diária">Diária</option>
+                        <option value="Semanal">Semanal</option>
+                        <option value="Quinzenal">Quinzenal</option>
+                        <option value="Mensal">Mensal</option>
+                    </select>
+                </div>
+                <textarea id="taskNotes" placeholder="Anotações sobre a tarefa (opcional)..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white; resize: vertical; min-height: 60px; box-sizing: border-box;"></textarea>
+                <button type="submit" class="btn-add" style="width: 100%; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">Adicionar Nova Tarefa</button>
             </form>
         </div>
 
@@ -299,7 +319,7 @@
 
         // Dados Iniciais Baseados nas Planilhas
         const defaultTasks = [
-            { id: 1, name: "Exemplo: Beber 2L de água", points: 10, frequency: "Diária" },
+            { id: 1, name: "Exemplo: Beber 2L de água", points: 10, frequency: "Diária", notes: "Lembrar de encher a garrafa grande de manhã e deixar na mesa de trabalho." },
             { id: 2, name: "Exemplo: Ler 15 páginas de um livro", points: 30, frequency: "Diária" },
             { id: 3, name: "Exemplo: Fazer faxina na casa", points: 100, frequency: "Semanal" },
             { id: 4, name: "Exemplo: Pagar as contas", points: 50, frequency: "Mensal" }
@@ -404,6 +424,13 @@
             }
         }
 
+        function toggleNotes(id) {
+            const notesDiv = document.getElementById('notes-' + id);
+            if (notesDiv) {
+                notesDiv.style.display = (notesDiv.style.display === 'block') ? 'none' : 'block';
+            }
+        }
+
         // Ações de Exclusão
         function deleteTask(id) {
             state.tasks = state.tasks.filter(task => task.id !== id);
@@ -423,7 +450,8 @@
             const name = document.getElementById('taskName').value;
             const points = parseInt(document.getElementById('taskPoints').value);
             const frequency = document.getElementById('taskFrequency').value;
-            state.tasks.push({ id: Date.now(), name, points, frequency });
+            const notes = document.getElementById('taskNotes').value;
+            state.tasks.push({ id: Date.now(), name, points, frequency, notes });
             saveState();
             this.reset();
             render();
@@ -467,14 +495,18 @@
                         const li = document.createElement('li');
                         li.className = 'item';
                         li.innerHTML = `
-                            <div class="item-info">
-                                <span class="item-title">${task.name}</span>
-                                <span class="item-points">+${task.points} Pts</span>
+                            <div class="item-header">
+                                <div class="item-info">
+                                    <span class="item-title">${task.name}</span>
+                                    <span class="item-points">+${task.points} Pts</span>
+                                </div>
+                                <div class="action-group">
+                                    ${task.notes ? `<button class="btn-delete" onclick="toggleNotes(${task.id})" title="Ver Anotações">📝</button>` : ''}
+                                    <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
+                                    <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
+                                </div>
                             </div>
-                            <div class="action-group">
-                                <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
-                                <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
-                            </div>
+                            ${task.notes ? `<div class="item-notes" id="notes-${task.id}">${task.notes}</div>` : ''}
                         `;
                         taskList.appendChild(li);
                     });
