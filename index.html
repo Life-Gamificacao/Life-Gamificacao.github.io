@@ -135,6 +135,7 @@
 
         .add-form {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin-top: 15px;
             padding-top: 15px;
@@ -250,8 +251,14 @@
             <h2>Tarefas (Gerar Pontos)</h2>
             <ul class="item-list" id="taskList"></ul>
             <form class="add-form" id="formTask">
-                <input type="text" id="taskName" placeholder="Nova Tarefa" required>
-                <input type="number" id="taskPoints" placeholder="Pts" required min="1">
+                <input type="text" id="taskName" placeholder="Nova Tarefa" required style="flex-grow: 1;">
+                <input type="number" id="taskPoints" placeholder="Pts" required min="1" style="width: 70px;">
+                <select id="taskFrequency" required style="padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
+                    <option value="Diária">Diária</option>
+                    <option value="Semanal">Semanal</option>
+                    <option value="Quinzenal">Quinzenal</option>
+                    <option value="Mensal">Mensal</option>
+                </select>
                 <button type="submit" class="btn-add">+</button>
             </form>
         </div>
@@ -292,14 +299,14 @@
 
         // Dados Iniciais Baseados nas Planilhas
         const defaultTasks = [
-            { id: 1, name: "1 hora de treino", points: 100 },
-            { id: 2, name: "30 minutos estudando Inglês", points: 50 },
-            { id: 3, name: "1 hora estudando graduação", points: 20 },
-            { id: 4, name: "Ligar para familiares", points: 10 },
-            { id: 5, name: "Guardar R$200 na poupança", points: 200 },
-            { id: 6, name: "Postar 2 vídeos", points: 20 },
-            { id: 7, name: "Postar 5 shorts", points: 20 },
-            { id: 8, name: "Postar 1 video", points: 20 }
+            { id: 1, name: "1 hora de treino", points: 100, frequency: "Diária" },
+            { id: 2, name: "30 minutos estudando Inglês", points: 50, frequency: "Diária" },
+            { id: 3, name: "1 hora estudando graduação", points: 20, frequency: "Diária" },
+            { id: 4, name: "Ligar para familiares", points: 10, frequency: "Semanal" },
+            { id: 5, name: "Guardar R$200 na poupança", points: 200, frequency: "Mensal" },
+            { id: 6, name: "Postar 2 vídeos", points: 20, frequency: "Semanal" },
+            { id: 7, name: "Postar 5 shorts", points: 20, frequency: "Semanal" },
+            { id: 8, name: "Postar 1 video", points: 20, frequency: "Diária" }
         ];
 
         const defaultRewards = [
@@ -423,7 +430,8 @@
             e.preventDefault();
             const name = document.getElementById('taskName').value;
             const points = parseInt(document.getElementById('taskPoints').value);
-            state.tasks.push({ id: Date.now(), name, points });
+            const frequency = document.getElementById('taskFrequency').value;
+            state.tasks.push({ id: Date.now(), name, points, frequency });
             saveState();
             this.reset();
             render();
@@ -446,20 +454,39 @@
             // Renderizar Tarefas
             const taskList = document.getElementById('taskList');
             taskList.innerHTML = '';
-            state.tasks.forEach(task => {
-                const li = document.createElement('li');
-                li.className = 'item';
-                li.innerHTML = `
-                    <div class="item-info">
-                        <span class="item-title">${task.name}</span>
-                        <span class="item-points">+${task.points} Pts</span>
-                    </div>
-                    <div class="action-group">
-                        <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
-                        <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
-                    </div>
-                `;
-                taskList.appendChild(li);
+            
+            const frequencies = ['Diária', 'Semanal', 'Quinzenal', 'Mensal'];
+            
+            frequencies.forEach(freq => {
+                const tasksInFreq = state.tasks.filter(t => (t.frequency || 'Diária') === freq);
+                
+                if (tasksInFreq.length > 0) {
+                    const freqHeader = document.createElement('h3');
+                    freqHeader.innerText = freq;
+                    freqHeader.style.color = 'var(--text-muted)';
+                    freqHeader.style.fontSize = '0.9em';
+                    freqHeader.style.textTransform = 'uppercase';
+                    freqHeader.style.margin = '15px 0 5px 0';
+                    freqHeader.style.borderBottom = '1px solid #333';
+                    freqHeader.style.paddingBottom = '5px';
+                    taskList.appendChild(freqHeader);
+                    
+                    tasksInFreq.forEach(task => {
+                        const li = document.createElement('li');
+                        li.className = 'item';
+                        li.innerHTML = `
+                            <div class="item-info">
+                                <span class="item-title">${task.name}</span>
+                                <span class="item-points">+${task.points} Pts</span>
+                            </div>
+                            <div class="action-group">
+                                <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
+                                <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
+                            </div>
+                        `;
+                        taskList.appendChild(li);
+                    });
+                }
             });
 
             // Renderizar Recompensas
