@@ -59,9 +59,64 @@
             color: white;
         }
         .container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            display: block;
+        }
+        
+        /* Menu Lateral (Sidebar) */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .sidebar-overlay.open {
+            display: block;
+            opacity: 1;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: -280px;
+            width: 260px;
+            height: 100%;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            transition: left 0.3s ease;
+            z-index: 1000;
+            padding-top: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar.open {
+            left: 0;
+        }
+        .sidebar-header {
+            font-size: 1.5em;
+            font-weight: bold;
+            padding: 0 20px 20px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px;
+        }
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            font-size: 1.1em;
+            border-bottom: 1px solid #333;
+            transition: 0.2s;
+        }
+        .sidebar a:hover, .sidebar a.active {
+            background: #333;
+            color: var(--accent-blue);
+            border-left: 4px solid var(--accent-blue);
         }
         .panel {
             background: var(--panel-bg);
@@ -239,10 +294,21 @@
 
     <!-- APP PRINCIPAL (Oculto inicialmente) -->
     <div id="appContent" style="display: none;">
+        <!-- Menu Lateral -->
+        <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleMenu()"></div>
+        <div id="sidebar" class="sidebar">
+            <div class="sidebar-header">Menu Principal</div>
+            <a href="#" id="tabTarefas" class="active" onclick="showTab('tarefas')">🎯 Tarefas</a>
+            <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
+        </div>
+
         <div class="header">
             <!-- Cabeçalho com botão de Sair -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
-                <h1 style="margin: 0; font-size: 1.5em;">Life Gamification</h1>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button onclick="toggleMenu()" style="background:none; border:none; color:white; font-size:1.5em; cursor:pointer;">☰</button>
+                    <h1 style="margin: 0; font-size: 1.5em;">Life Gamification</h1>
+                </div>
                 <div style="font-size: 0.85em; color: var(--text-muted);">
                     <span id="userEmail"></span>
                     <button class="btn-delete" style="padding: 4px 8px; margin-left: 10px;" onclick="logout()">Sair</button>
@@ -264,7 +330,7 @@
 
         <div class="container">
         <!-- TAREFAS -->
-        <div class="panel">
+        <div class="panel" id="panelTarefas">
             <h2>Tarefas (Gerar Pontos)</h2>
             <ul class="item-list" id="taskList"></ul>
             <form class="add-form" id="formTask" style="flex-direction: column;">
@@ -284,7 +350,7 @@
         </div>
 
         <!-- RECOMPENSAS -->
-        <div class="panel">
+        <div class="panel" id="panelRecompensas" style="display: none;">
             <h2>Recompensas (Gastar Pontos)</h2>
             <ul class="item-list" id="rewardList"></ul>
             <form class="add-form" id="formReward" style="flex-direction: column;">
@@ -647,6 +713,28 @@
                 panel.style.display = 'none';
                 btn.innerText = 'Ver Detalhes';
             }
+        }
+
+        function toggleMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('open');
+            } else {
+                sidebar.classList.add('open');
+                overlay.classList.add('open');
+            }
+        }
+
+        function showTab(tabId) {
+            document.getElementById('panelTarefas').style.display = (tabId === 'tarefas') ? 'block' : 'none';
+            document.getElementById('panelRecompensas').style.display = (tabId === 'recompensas') ? 'block' : 'none';
+            
+            document.getElementById('tabTarefas').className = (tabId === 'tarefas') ? 'active' : '';
+            document.getElementById('tabRecompensas').className = (tabId === 'recompensas') ? 'active' : '';
+            
+            toggleMenu();
         }
 
         // O app agora inicia automaticamente pelo auth.onAuthStateChanged
