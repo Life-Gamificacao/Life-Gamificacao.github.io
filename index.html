@@ -297,21 +297,23 @@
         <!-- Menu Lateral -->
         <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleMenu()"></div>
         <div id="sidebar" class="sidebar">
-            <div class="sidebar-header">Menu Principal</div>
-            <a href="#" id="tabTarefas" class="active" onclick="showTab('tarefas')">🎯 Tarefas</a>
-            <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
+            <div>
+                <div class="sidebar-header">Menu Principal</div>
+                <a href="#" id="tabTarefas" class="active" onclick="showTab('tarefas')">🎯 Tarefas</a>
+                <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
+            </div>
+            <div style="margin-top: auto; padding: 20px; border-top: 1px solid var(--border); text-align: center;">
+                <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;"></div>
+                <button class="btn-delete" style="width: 100%; padding: 10px;" onclick="logout()">Sair</button>
+            </div>
         </div>
 
         <div class="header">
-            <!-- Cabeçalho com botão de Sair -->
+            <!-- Cabeçalho -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <button onclick="toggleMenu()" style="background:none; border:none; color:white; font-size:1.5em; cursor:pointer;">☰</button>
                     <h1 style="margin: 0; font-size: 1.5em;">Life Gamification</h1>
-                </div>
-                <div style="font-size: 0.85em; color: var(--text-muted);">
-                    <span id="userEmail"></span>
-                    <button class="btn-delete" style="padding: 4px 8px; margin-left: 10px;" onclick="logout()">Sair</button>
                 </div>
             </div>
             
@@ -334,8 +336,8 @@
             <h2>Tarefas (Gerar Pontos)</h2>
             <ul class="item-list" id="taskList"></ul>
             <form class="add-form" id="formTask" style="flex-direction: column;">
-                <div style="display: flex; gap: 10px; width: 100%;">
-                    <input type="text" id="taskName" placeholder="Nova Tarefa" required style="flex-grow: 1;">
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
+                    <input type="text" id="taskName" placeholder="Nova Tarefa" required style="flex-grow: 1; min-width: 150px;">
                     <input type="number" id="taskPoints" placeholder="Pts" required min="1" style="width: 70px;">
                     <select id="taskFrequency" required style="padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
                         <option value="Diária">Diária</option>
@@ -354,8 +356,8 @@
             <h2>Recompensas (Gastar Pontos)</h2>
             <ul class="item-list" id="rewardList"></ul>
             <form class="add-form" id="formReward" style="flex-direction: column;">
-                <div style="display: flex; gap: 10px; width: 100%;">
-                    <input type="text" id="rewardName" placeholder="Nova Recompensa" required style="flex-grow: 1;">
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
+                    <input type="text" id="rewardName" placeholder="Nova Recompensa" required style="flex-grow: 1; min-width: 150px;">
                     <input type="number" id="rewardPoints" placeholder="Custo (Pts)" required min="0" style="width: 80px;">
                 </div>
                 
