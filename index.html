@@ -285,15 +285,19 @@
 </head>
 <body>
 
-    <!-- TELA DE LOGIN -->
-    <div id="loginContent" class="header" style="text-align: center; margin-top: 50px;">
-        <h1 style="font-size: 2em; margin-bottom: 10px;">Life Gamification</h1>
-        <p style="color: var(--text-muted); margin-bottom: 30px;">Faça login para sincronizar seus pontos e tarefas na nuvem.</p>
-        <button class="btn-task" style="font-size: 1.2em; padding: 12px 24px;" onclick="login()">Entrar com Google</button>
+    <!-- TELA DE LOGIN (Modal) -->
+    <div id="loginModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
+        <div style="background: #111; padding: 40px; border-radius: 8px; max-width: 400px; width: 100%;">
+            <div style="font-size: 4em; margin-bottom: 20px;">🎮</div>
+            <h1 style="font-size: 2em; margin-bottom: 10px;">Life Gamification</h1>
+            <p style="color: var(--text-muted); margin-bottom: 30px;">Faça login para salvar seus pontos, compartilhar tarefas e não perder seu progresso!</p>
+            <button class="btn-task" style="font-size: 1.2em; padding: 12px 24px; width: 100%; margin-bottom: 15px;" onclick="login()">Entrar com Google</button>
+            <button onclick="document.getElementById('loginModal').style.display = 'none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; text-decoration: underline;">Continuar como Visitante</button>
+        </div>
     </div>
 
-    <!-- APP PRINCIPAL (Oculto inicialmente) -->
-    <div id="appContent" style="display: none;">
+    <!-- APP PRINCIPAL -->
+    <div id="appContent">
         <!-- Menu Lateral -->
         <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleMenu()"></div>
         <div id="sidebar" class="sidebar">
@@ -304,8 +308,9 @@
                 <a href="#" id="tabParceiros" onclick="showTab('parceiros')">👥 Parceiros</a>
             </div>
             <div style="margin-top: auto; padding: 20px; border-top: 1px solid var(--border); text-align: center;">
-                <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;"></div>
-                <button class="btn-delete" style="width: 100%; padding: 10px;" onclick="logout()">Sair</button>
+                <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;">Modo Visitante</div>
+                <button id="logoutBtn" class="btn-delete" style="width: 100%; padding: 10px; display: none;" onclick="logout()">Sair</button>
+                <button id="loginBtnSidebar" class="btn-task" style="width: 100%; padding: 10px; display: block;" onclick="document.getElementById('loginModal').style.display = 'flex'">Fazer Login</button>
             </div>
         </div>
 
@@ -468,14 +473,14 @@
 
         // Monitor de Login e Sincronização em Tempo Real
         auth.onAuthStateChanged((user) => {
-            const loginContent = document.getElementById('loginContent');
-            const appContent = document.getElementById('appContent');
+            const loginModal = document.getElementById('loginModal');
             
             if (user) {
                 // Usuário logado
-                loginContent.style.display = 'none';
-                appContent.style.display = 'block';
+                if (loginModal) loginModal.style.display = 'none';
                 document.getElementById('userEmail').innerText = user.email;
+                document.getElementById('logoutBtn').style.display = 'block';
+                document.getElementById('loginBtnSidebar').style.display = 'none';
                 
                 userDocRef = db.collection('users').doc(user.uid);
                 
@@ -543,11 +548,36 @@
 
             } else {
                 // Usuário deslogado
-                loginContent.style.display = 'block';
-                appContent.style.display = 'none';
                 userDocRef = null;
+                document.getElementById('userEmail').innerText = 'Modo Visitante';
+                document.getElementById('logoutBtn').style.display = 'none';
+                document.getElementById('loginBtnSidebar').style.display = 'block';
+                
+                // Carregar modo visitante
+                state.tasks = [...defaultTasks];
+                state.rewards = [...defaultRewards];
+                state.history = [];
+                state.totalPoints = 0;
+                state.partners = {};
+                
+                sharedState = { tasks: [], rewards: [], balances: {}, history: [] };
+                sharedUnsubscribers.forEach(unsub => unsub());
+                sharedUnsubscribers = [];
+                
+                render();
+                
+                // Mostrar convite para logar na primeira vez se quiser
+                // setTimeout(() => { if (!user) document.getElementById('loginModal').style.display = 'flex'; }, 1000);
             }
         });
+
+        function requireLogin() {
+            if (!firebase.auth().currentUser) {
+                document.getElementById('loginModal').style.display = 'flex';
+                return false;
+            }
+            return true;
+        }
 
         function login() {
             const provider = new firebase.auth.GoogleAuthProvider();
@@ -566,6 +596,8 @@
 
         // Ações de Pontuação
         function completeTask(taskId, isShared = false) {
+            if (!requireLogin()) return;
+            
             if (isShared) {
                 const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
                 if (task) {
@@ -601,6 +633,8 @@
         }
 
         function redeemReward(rewardId, isShared = false) {
+            if (!requireLogin()) return;
+            
             if (isShared) {
                 const reward = sharedState.rewards.find(r => String(r.id) === String(rewardId));
                 if (reward) {
@@ -675,6 +709,8 @@
         }
 
         function resetPoints() {
+            if (!requireLogin()) return;
+            
             const confirmed = confirm("⚠️ AVISO DE SEGURANÇA ⚠️\n\nTem certeza que deseja zerar TODOS os seus pontos? Essa ação não poderá ser desfeita.");
             if (confirmed) {
                 state.totalPoints = 0;
@@ -719,6 +755,8 @@
 
         // Ações de Exclusão
         function deleteTask(id, isShared = false) {
+            if (!requireLogin()) return;
+            
             if (confirm("Tem certeza que deseja apagar esta tarefa?")) {
                 if (isShared) {
                     db.collection('shared_tasks').doc(id).delete();
@@ -731,6 +769,8 @@
         }
 
         function deleteReward(id, isShared = false) {
+            if (!requireLogin()) return;
+            
             if (confirm("Tem certeza que deseja apagar esta recompensa?")) {
                 if (isShared) {
                     db.collection('shared_rewards').doc(id).delete();
@@ -745,6 +785,8 @@
         // Adicionar Novos Itens
         document.getElementById('formTask').addEventListener('submit', function(e) {
             e.preventDefault();
+            if (!requireLogin()) return;
+            
             const name = document.getElementById('taskName').value;
             const points = parseInt(document.getElementById('taskPoints').value);
             const frequency = document.getElementById('taskFrequency').value;
@@ -778,6 +820,8 @@
 
         document.getElementById('formReward').addEventListener('submit', function(e) {
             e.preventDefault();
+            if (!requireLogin()) return;
+            
             const name = document.getElementById('rewardName').value;
             const points = parseInt(document.getElementById('rewardPoints').value);
             
@@ -1086,6 +1130,8 @@
         }
 
         function toggleHistory() {
+            if (!requireLogin()) return;
+            
             const panel = document.getElementById('historyPanel');
             const btn = document.getElementById('toggleHistoryBtn');
             if (panel.style.display === 'none') {
