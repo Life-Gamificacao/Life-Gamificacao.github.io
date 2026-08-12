@@ -317,8 +317,20 @@
                 </div>
             </div>
             
-            <h2 style="margin: 0; font-size: 1.2em; color: var(--text-muted);">Saldo de Pontos</h2>
-            <div class="score-display" id="totalPoints">0</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                <div style="background: var(--panel-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                    <div style="font-size: 0.9em; color: var(--text-muted); text-transform: uppercase;">Individuais</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: var(--accent-blue);" id="individualPoints">0</div>
+                </div>
+                <div style="background: var(--panel-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                    <div style="font-size: 0.9em; color: var(--text-muted); text-transform: uppercase;">Compartilhados</div>
+                    <div style="font-size: 1.8em; font-weight: bold; color: var(--accent-green);" id="sharedPoints">0</div>
+                </div>
+                <div style="grid-column: span 2; background: linear-gradient(45deg, #1a1a1a, #2a2a2a); padding: 15px; border-radius: 8px; border: 1px solid var(--accent-blue); text-align: center;">
+                    <div style="font-size: 0.9em; color: var(--text-muted); text-transform: uppercase;">Total Bruto</div>
+                    <div style="font-size: 2.2em; font-weight: bold; color: white;" id="totalPoints">0</div>
+                </div>
+            </div>
             <div>
                 <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
                 <button id="toggleHistoryBtn" class="btn-history" onclick="toggleHistory()">Ver Detalhes</button>
@@ -347,7 +359,18 @@
                     </select>
                 </div>
                 <textarea id="taskNotes" placeholder="Anotações sobre a tarefa (opcional)..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white; resize: vertical; min-height: 60px; box-sizing: border-box;"></textarea>
-                <button type="submit" class="btn-add" style="width: 100%; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">Adicionar Nova Tarefa</button>
+                
+                <div style="margin-top: 10px; font-size: 0.9em; background: #222; padding: 10px; border-radius: 4px; border: 1px solid var(--border);">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="taskShareCheck" onchange="document.getElementById('taskShareEmailContainer').style.display = this.checked ? 'block' : 'none'">
+                        Compartilhar esta tarefa
+                    </label>
+                    <div id="taskShareEmailContainer" style="display: none; margin-top: 10px;">
+                        <input type="email" id="taskShareEmail" placeholder="E-mail do parceiro" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #111; color: white;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-add" style="width: 100%; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px;">Adicionar Nova Tarefa</button>
             </form>
         </div>
 
@@ -365,6 +388,16 @@
                     <label>Exige gastar tarefas específicas? (Opcional):</label>
                     <div id="rewardPrereqs" style="max-height: 100px; overflow-y: auto; background: #222; border: 1px solid var(--border); padding: 5px; border-radius: 4px; margin-top: 5px;">
                         <!-- O JavaScript vai preencher os checkboxes aqui -->
+                    </div>
+                </div>
+                
+                <div style="margin-top: 10px; font-size: 0.9em; background: #222; padding: 10px; border-radius: 4px; border: 1px solid var(--border);">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="rewardShareCheck" onchange="document.getElementById('rewardShareEmailContainer').style.display = this.checked ? 'block' : 'none'">
+                        Compartilhar esta recompensa
+                    </label>
+                    <div id="rewardShareEmailContainer" style="display: none; margin-top: 10px;">
+                        <input type="email" id="rewardShareEmail" placeholder="E-mail do parceiro" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: #111; color: white;">
                     </div>
                 </div>
 
@@ -410,12 +443,22 @@
         ];
 
         // Estado da Aplicação
+        // Estado da Aplicação (Individual)
         let state = {
             totalPoints: 0,
             tasks: [],
             rewards: [],
             history: []
         };
+
+        // Estado da Aplicação (Compartilhado)
+        let sharedState = {
+            tasks: [],
+            rewards: [],
+            balances: {}, // { "emailA_emailB": 100 }
+            history: []
+        };
+        let sharedUnsubscribers = [];
 
         // Monitor de Login e Sincronização em Tempo Real
         auth.onAuthStateChanged((user) => {
@@ -444,6 +487,54 @@
                     }
                     render();
                 });
+
+                // -------------------------------------------------------------
+                // PASSO 1: OUVINTES DAS COLEÇÕES COMPARTILHADAS (SOCIAL)
+                // -------------------------------------------------------------
+                
+                // Limpar ouvintes antigos caso o usuário troque de conta
+                sharedUnsubscribers.forEach(unsub => unsub());
+                sharedUnsubscribers = [];
+                
+                // 1. Ouvir Tarefas Compartilhadas
+                const unsubTasks = db.collection('shared_tasks')
+                    .where('members', 'array-contains', user.email)
+                    .onSnapshot(snapshot => {
+                        sharedState.tasks = [];
+                        snapshot.forEach(doc => {
+                            sharedState.tasks.push({ id: doc.id, ...doc.data() });
+                        });
+                        render();
+                    }, error => console.log("Aviso: Permissão negada ou regras pendentes para shared_tasks. Atualize no Firebase Console.", error));
+                sharedUnsubscribers.push(unsubTasks);
+
+                // 2. Ouvir Recompensas Compartilhadas
+                const unsubRewards = db.collection('shared_rewards')
+                    .where('members', 'array-contains', user.email)
+                    .onSnapshot(snapshot => {
+                        sharedState.rewards = [];
+                        snapshot.forEach(doc => {
+                            sharedState.rewards.push({ id: doc.id, ...doc.data() });
+                        });
+                        render();
+                    }, error => console.log("Aviso: Permissão negada ou regras pendentes para shared_rewards. Atualize no Firebase Console.", error));
+                sharedUnsubscribers.push(unsubRewards);
+
+                // 3. Ouvir Saldos Compartilhados
+                const unsubBalances = db.collection('shared_balances')
+                    .where('members', 'array-contains', user.email)
+                    .onSnapshot(snapshot => {
+                        sharedState.balances = {};
+                        snapshot.forEach(doc => {
+                            sharedState.balances[doc.id] = {
+                                points: doc.data().points || 0,
+                                history: doc.data().history || []
+                            };
+                        });
+                        render();
+                    }, error => console.log("Aviso: Permissão negada ou regras pendentes para shared_balances. Atualize no Firebase Console.", error));
+                sharedUnsubscribers.push(unsubBalances);
+
             } else {
                 // Usuário deslogado
                 loginContent.style.display = 'block';
@@ -468,45 +559,111 @@
         }
 
         // Ações de Pontuação
-        function completeTask(taskId) {
-            const task = state.tasks.find(t => t.id === taskId);
-            if (task) {
-                state.totalPoints += task.points;
-                task.completions = (task.completions || 0) + 1;
-                const date = new Date().toLocaleString('pt-BR');
-                state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date });
-                saveState();
-                render();
+        function completeTask(taskId, isShared = false) {
+            if (isShared) {
+                const task = sharedState.tasks.find(t => t.id === taskId);
+                if (task) {
+                    const balanceId = task.members.slice().sort().join('_');
+                    const myEmail = firebase.auth().currentUser.email;
+                    
+                    const currentCompletions = task.completions || 0;
+                    db.collection('shared_tasks').doc(taskId).update({
+                        completions: currentCompletions + 1
+                    });
+
+                    const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
+                    const date = new Date().toLocaleString('pt-BR');
+                    const logEntry = { type: 'earn', name: task.name, points: task.points, date: date, user: myEmail, isShared: true };
+                    
+                    db.collection('shared_balances').doc(balanceId).set({
+                        points: currentBalance + task.points,
+                        members: task.members,
+                        history: firebase.firestore.FieldValue.arrayUnion(logEntry)
+                    }, { merge: true });
+                }
+            } else {
+                const task = state.tasks.find(t => t.id === taskId);
+                if (task) {
+                    state.totalPoints += task.points;
+                    task.completions = (task.completions || 0) + 1;
+                    const date = new Date().toLocaleString('pt-BR');
+                    state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date, isShared: false });
+                    saveState();
+                    render();
+                }
             }
         }
 
-        function redeemReward(rewardId) {
-            const reward = state.rewards.find(r => r.id === rewardId);
-            if (reward) {
-                let hasAllPrereqs = true;
-                if (reward.prereqs && reward.prereqs.length > 0) {
-                    reward.prereqs.forEach(prereqId => {
-                        const t = state.tasks.find(t => t.id === parseInt(prereqId));
-                        if (!t || (t.completions || 0) < 1) hasAllPrereqs = false;
-                    });
-                }
-                
-                if (state.totalPoints >= reward.points && hasAllPrereqs) {
-                    state.totalPoints -= reward.points;
+        function redeemReward(rewardId, isShared = false) {
+            if (isShared) {
+                const reward = sharedState.rewards.find(r => r.id === rewardId);
+                if (reward) {
+                    const balanceId = reward.members.slice().sort().join('_');
+                    const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
                     
-                    if (reward.prereqs) {
+                    let hasAllPrereqs = true;
+                    if (reward.prereqs && reward.prereqs.length > 0) {
                         reward.prereqs.forEach(prereqId => {
-                            const t = state.tasks.find(t => t.id === parseInt(prereqId));
-                            if (t) t.completions -= 1;
+                            const t = sharedState.tasks.find(t => t.id === prereqId) || state.tasks.find(t => String(t.id) === String(prereqId));
+                            if (!t || (t.completions || 0) < 1) hasAllPrereqs = false;
                         });
                     }
                     
-                    const date = new Date().toLocaleString('pt-BR');
-                    state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date });
-                    saveState();
-                    render();
-                } else {
-                    alert("Você não possui os requisitos (pontos ou tarefas) para esta recompensa!");
+                    if (currentBalance >= reward.points && hasAllPrereqs) {
+                        const myEmail = firebase.auth().currentUser.email;
+                        const date = new Date().toLocaleString('pt-BR');
+                        const logEntry = { type: 'spend', name: reward.name, points: reward.points, date: date, user: myEmail, isShared: true };
+                        
+                        db.collection('shared_balances').doc(balanceId).set({
+                            points: currentBalance - reward.points,
+                            members: reward.members,
+                            history: firebase.firestore.FieldValue.arrayUnion(logEntry)
+                        }, { merge: true });
+                        
+                        if (reward.prereqs) {
+                            reward.prereqs.forEach(prereqId => {
+                                const tShared = sharedState.tasks.find(t => t.id === prereqId);
+                                if (tShared) {
+                                    db.collection('shared_tasks').doc(tShared.id).update({ completions: (tShared.completions || 1) - 1 });
+                                } else {
+                                    const tLocal = state.tasks.find(t => String(t.id) === String(prereqId));
+                                    if (tLocal) {
+                                        tLocal.completions -= 1;
+                                        saveState();
+                                    }
+                                }
+                            });
+                        }
+                    } else {
+                        alert("A dupla não possui os requisitos (pontos ou tarefas) para esta recompensa compartilhada!");
+                    }
+                }
+            } else {
+                const reward = state.rewards.find(r => r.id === rewardId);
+                if (reward) {
+                    let hasAllPrereqs = true;
+                    if (reward.prereqs && reward.prereqs.length > 0) {
+                        reward.prereqs.forEach(prereqId => {
+                            const t = state.tasks.find(t => String(t.id) === String(prereqId));
+                            if (!t || (t.completions || 0) < 1) hasAllPrereqs = false;
+                        });
+                    }
+                    
+                    if (state.totalPoints >= reward.points && hasAllPrereqs) {
+                        state.totalPoints -= reward.points;
+                        if (reward.prereqs) {
+                            reward.prereqs.forEach(prereqId => {
+                                const t = state.tasks.find(t => String(t.id) === String(prereqId));
+                                if (t) t.completions -= 1;
+                            });
+                        }
+                        const date = new Date().toLocaleString('pt-BR');
+                        state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date, isShared: false });
+                        saveState();
+                        render();
+                    } else {
+                        alert("Você não possui os requisitos (pontos ou tarefas) para esta recompensa!");
+                    }
                 }
             }
         }
@@ -529,19 +686,27 @@
         }
 
         // Ações de Exclusão
-        function deleteTask(id) {
+        function deleteTask(id, isShared = false) {
             if (confirm("Tem certeza que deseja apagar esta tarefa?")) {
-                state.tasks = state.tasks.filter(task => task.id !== id);
-                saveState();
-                render();
+                if (isShared) {
+                    db.collection('shared_tasks').doc(id).delete();
+                } else {
+                    state.tasks = state.tasks.filter(task => task.id !== id);
+                    saveState();
+                    render();
+                }
             }
         }
 
-        function deleteReward(id) {
+        function deleteReward(id, isShared = false) {
             if (confirm("Tem certeza que deseja apagar esta recompensa?")) {
-                state.rewards = state.rewards.filter(reward => reward.id !== id);
-                saveState();
-                render();
+                if (isShared) {
+                    db.collection('shared_rewards').doc(id).delete();
+                } else {
+                    state.rewards = state.rewards.filter(reward => reward.id !== id);
+                    saveState();
+                    render();
+                }
             }
         }
 
@@ -552,9 +717,24 @@
             const points = parseInt(document.getElementById('taskPoints').value);
             const frequency = document.getElementById('taskFrequency').value;
             const notes = document.getElementById('taskNotes').value;
-            state.tasks.push({ id: Date.now(), name, points, frequency, notes });
-            saveState();
+            
+            const isShared = document.getElementById('taskShareCheck').checked;
+            const partnerEmail = document.getElementById('taskShareEmail').value.trim();
+            const myEmail = firebase.auth().currentUser.email;
+            
+            if (isShared && partnerEmail) {
+                db.collection('shared_tasks').add({
+                    name, points, frequency, notes,
+                    members: [myEmail, partnerEmail],
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                state.tasks.push({ id: Date.now(), name, points, frequency, notes });
+                saveState();
+            }
+            
             this.reset();
+            document.getElementById('taskShareEmailContainer').style.display = 'none';
             render();
         });
 
@@ -564,26 +744,59 @@
             const points = parseInt(document.getElementById('rewardPoints').value);
             
             const checkboxes = document.querySelectorAll('input[name="prereq"]:checked');
-            const prereqs = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            const prereqs = Array.from(checkboxes).map(cb => cb.value);
             
-            state.rewards.push({ id: Date.now(), name, points, prereqs });
-            saveState();
+            const isShared = document.getElementById('rewardShareCheck').checked;
+            const partnerEmail = document.getElementById('rewardShareEmail').value.trim();
+            const myEmail = firebase.auth().currentUser.email;
+
+            if (isShared && partnerEmail) {
+                db.collection('shared_rewards').add({
+                    name, points, prereqs,
+                    members: [myEmail, partnerEmail],
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } else {
+                state.rewards.push({ id: Date.now(), name, points, prereqs });
+                saveState();
+            }
+            
             this.reset();
+            document.getElementById('rewardShareEmailContainer').style.display = 'none';
             render();
         });
 
         // Renderização da Interface
         function render() {
-            document.getElementById('totalPoints').innerText = state.totalPoints;
+            // Calcular saldos
+            const indPoints = state.totalPoints || 0;
+            
+            let shPoints = 0;
+            if (sharedState && sharedState.balances) {
+                Object.values(sharedState.balances).forEach(val => {
+                    shPoints += val.points;
+                });
+            }
+            
+            const totPoints = indPoints + shPoints;
+
+            if (document.getElementById('individualPoints')) document.getElementById('individualPoints').innerText = indPoints;
+            if (document.getElementById('sharedPoints')) document.getElementById('sharedPoints').innerText = shPoints;
+            if (document.getElementById('totalPoints')) document.getElementById('totalPoints').innerText = totPoints;
 
             // Renderizar Tarefas
+            let allTasks = [
+                ...(state.tasks || []).map(t => ({...t, isShared: false})),
+                ...(sharedState.tasks || []).map(t => ({...t, isShared: true}))
+            ];
+
             const taskList = document.getElementById('taskList');
             taskList.innerHTML = '';
             
             const frequencies = ['Diária', 'Semanal', 'Quinzenal', 'Mensal'];
             
             frequencies.forEach(freq => {
-                const tasksInFreq = state.tasks.filter(t => (t.frequency || 'Diária') === freq);
+                const tasksInFreq = allTasks.filter(t => (t.frequency || 'Diária') === freq);
                 
                 if (tasksInFreq.length > 0) {
                     const freqHeader = document.createElement('h3');
@@ -599,16 +812,17 @@
                     tasksInFreq.forEach(task => {
                         const li = document.createElement('li');
                         li.className = 'item';
+                        const badge = task.isShared ? '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7em; margin-left: 5px;">Conjunto</span>' : '';
                         li.innerHTML = `
                             <div class="item-header">
                                 <div class="item-info">
-                                    <span class="item-title">${task.name}</span>
+                                    <span class="item-title">${task.name} ${badge}</span>
                                     <span class="item-points">+${task.points} Pts</span>
                                 </div>
                                 <div class="action-group">
-                                    ${task.notes ? `<button class="btn-delete" onclick="toggleNotes(${task.id})" title="Ver Anotações">📝</button>` : ''}
-                                    <button class="btn-task" onclick="completeTask(${task.id})">Feito</button>
-                                    <button class="btn-delete" onclick="deleteTask(${task.id})" title="Remover Tarefa">X</button>
+                                    ${task.notes ? `<button class="btn-delete" onclick="toggleNotes('${task.id}')" title="Ver Anotações">📝</button>` : ''}
+                                    <button class="btn-task" onclick="completeTask('${task.id}', ${task.isShared})">Feito</button>
+                                    <button class="btn-delete" onclick="deleteTask('${task.id}', ${task.isShared})" title="Remover Tarefa">X</button>
                                 </div>
                             </div>
                             ${task.notes ? `<div class="item-notes" id="notes-${task.id}">${task.notes}</div>` : ''}
@@ -622,31 +836,37 @@
             const prereqContainer = document.getElementById('rewardPrereqs');
             if (prereqContainer) {
                 prereqContainer.innerHTML = '';
-                if (state.tasks.length === 0) {
+                if (allTasks.length === 0) {
                     prereqContainer.innerHTML = '<span style="color: #666;">Nenhuma tarefa cadastrada.</span>';
                 } else {
-                    state.tasks.forEach(task => {
+                    allTasks.forEach(task => {
                         const label = document.createElement('label');
                         label.style.display = 'block';
                         label.style.marginBottom = '5px';
                         label.style.cursor = 'pointer';
                         const checkedCount = task.completions || 0;
-                        label.innerHTML = `<input type="checkbox" name="prereq" value="${task.id}" style="margin-right: 5px;"> ${task.name} <span style="color: var(--accent-blue); font-size: 0.8em;">(Saldo: ${checkedCount})</span>`;
+                        const badge = task.isShared ? '(Conjunta) ' : '';
+                        label.innerHTML = `<input type="checkbox" name="prereq" value="${task.id}" style="margin-right: 5px;"> ${badge}${task.name} <span style="color: var(--accent-blue); font-size: 0.8em;">(Saldo: ${checkedCount})</span>`;
                         prereqContainer.appendChild(label);
                     });
                 }
             }
 
             // Renderizar Recompensas
+            let allRewards = [
+                ...(state.rewards || []).map(r => ({...r, isShared: false})),
+                ...(sharedState.rewards || []).map(r => ({...r, isShared: true}))
+            ];
+            
             const rewardList = document.getElementById('rewardList');
             rewardList.innerHTML = '';
-            state.rewards.forEach(reward => {
+            allRewards.forEach(reward => {
                 let missingPrereqs = [];
                 let hasAllPrereqs = true;
                 
                 if (reward.prereqs && reward.prereqs.length > 0) {
                     reward.prereqs.forEach(prereqId => {
-                        const t = state.tasks.find(t => t.id === parseInt(prereqId));
+                        const t = allTasks.find(t => String(t.id) === String(prereqId));
                         if (!t || (t.completions || 0) < 1) {
                             hasAllPrereqs = false;
                             missingPrereqs.push(t ? t.name : "Tarefa excluída");
@@ -654,7 +874,12 @@
                     });
                 }
                 
-                const canAffordPoints = state.totalPoints >= reward.points;
+                let balanceToCheck = reward.isShared ? (() => {
+                    const balanceId = reward.members.slice().sort().join('_');
+                    return sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
+                })() : state.totalPoints;
+                
+                const canAffordPoints = balanceToCheck >= reward.points;
                 const canRedeem = canAffordPoints && hasAllPrereqs;
                 
                 let statusText = '';
@@ -665,36 +890,61 @@
                     statusText = `<div style="font-size: 0.75em; color: var(--accent-red); margin-top: 5px;">Falta: ${reasons.join(' | ')}</div>`;
                 }
 
+                const badge = reward.isShared ? '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7em; margin-left: 5px;">Conjunta</span>' : '';
                 const li = document.createElement('li');
                 li.className = 'item reward';
                 li.innerHTML = `
                     <div class="item-info">
-                        <span class="item-title">${reward.name}</span>
+                        <span class="item-title">${reward.name} ${badge}</span>
                         <span class="item-points">-${reward.points} Pts</span>
                         ${statusText}
                     </div>
                     <div class="action-group">
-                        <button class="btn-reward" ${!canRedeem ? 'disabled' : ''} onclick="redeemReward(${reward.id})">Resgatar</button>
-                        <button class="btn-delete" onclick="deleteReward(${reward.id})" title="Remover Recompensa">X</button>
+                        <button class="btn-reward" ${!canRedeem ? 'disabled' : ''} onclick="redeemReward('${reward.id}', ${reward.isShared})">Resgatar</button>
+                        <button class="btn-delete" onclick="deleteReward('${reward.id}', ${reward.isShared})" title="Remover Recompensa">X</button>
                     </div>
                 `;
                 rewardList.appendChild(li);
             });
 
-            // Renderizar Histórico
+            // Renderizar Histórico (Juntando local e compartilhado)
+            let allHistory = [...(state.history || [])];
+            
+            if (sharedState && sharedState.balances) {
+                Object.values(sharedState.balances).forEach(val => {
+                    if (val.history) {
+                        allHistory = allHistory.concat(val.history);
+                    }
+                });
+            }
+            
+            allHistory.sort((a, b) => {
+                const parseD = d => {
+                    if (!d) return 0;
+                    const parts = d.split(' ');
+                    if (parts.length < 2) return 0;
+                    const ds = parts[0].split('/');
+                    const ts = parts[1].split(':');
+                    if (ds.length < 3 || ts.length < 3) return 0;
+                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime();
+                };
+                return parseD(b.date) - parseD(a.date);
+            });
+
             const historyList = document.getElementById('historyList');
             if (historyList) {
                 historyList.innerHTML = '';
-                if (!state.history || state.history.length === 0) {
+                if (allHistory.length === 0) {
                     historyList.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum histórico ainda.</li>';
                 } else {
-                    state.history.forEach(log => {
+                    allHistory.forEach(log => {
                         const li = document.createElement('li');
                         li.className = 'history-item';
                         const isEarn = log.type === 'earn';
+                        const userTag = log.user ? ` <span style="font-size: 0.8em; color: var(--accent-green);">(${log.user.split('@')[0]})</span>` : '';
                         li.innerHTML = `
                             <span class="history-date">${log.date}</span>
-                            <span class="history-name">${log.name}</span>
+                            <span class="history-name">${log.name}${userTag}</span>
                             <span class="history-points ${isEarn ? 'earn' : 'spend'}">
                                 ${isEarn ? '+' : '-'}${log.points} Pts
                             </span>
