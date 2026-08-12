@@ -567,7 +567,7 @@
         // Ações de Pontuação
         function completeTask(taskId, isShared = false) {
             if (isShared) {
-                const task = sharedState.tasks.find(t => t.id === taskId);
+                const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
                 if (task) {
                     const balanceId = task.members.slice().sort().join('_');
                     const myEmail = firebase.auth().currentUser.email;
@@ -588,7 +588,7 @@
                     }, { merge: true });
                 }
             } else {
-                const task = state.tasks.find(t => t.id === taskId);
+                const task = state.tasks.find(t => String(t.id) === String(taskId));
                 if (task) {
                     state.totalPoints += task.points;
                     task.completions = (task.completions || 0) + 1;
@@ -602,7 +602,7 @@
 
         function redeemReward(rewardId, isShared = false) {
             if (isShared) {
-                const reward = sharedState.rewards.find(r => r.id === rewardId);
+                const reward = sharedState.rewards.find(r => String(r.id) === String(rewardId));
                 if (reward) {
                     const balanceId = reward.members.slice().sort().join('_');
                     const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
@@ -645,7 +645,7 @@
                     }
                 }
             } else {
-                const reward = state.rewards.find(r => r.id === rewardId);
+                const reward = state.rewards.find(r => String(r.id) === String(rewardId));
                 if (reward) {
                     let hasAllPrereqs = true;
                     if (reward.prereqs && reward.prereqs.length > 0) {
@@ -723,7 +723,7 @@
                 if (isShared) {
                     db.collection('shared_tasks').doc(id).delete();
                 } else {
-                    state.tasks = state.tasks.filter(task => task.id !== id);
+                    state.tasks = state.tasks.filter(task => String(task.id) !== String(id));
                     saveState();
                     render();
                 }
@@ -735,7 +735,7 @@
                 if (isShared) {
                     db.collection('shared_rewards').doc(id).delete();
                 } else {
-                    state.rewards = state.rewards.filter(reward => reward.id !== id);
+                    state.rewards = state.rewards.filter(reward => String(reward.id) !== String(id));
                     saveState();
                     render();
                 }
