@@ -301,6 +301,7 @@
                 <div class="sidebar-header">Menu Principal</div>
                 <a href="#" id="tabTarefas" class="active" onclick="showTab('tarefas')">🎯 Tarefas</a>
                 <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
+                <a href="#" id="tabParceiros" onclick="showTab('parceiros')">👥 Parceiros</a>
             </div>
             <div style="margin-top: auto; padding: 20px; border-top: 1px solid var(--border); text-align: center;">
                 <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;"></div>
@@ -404,7 +405,12 @@
                 <button type="submit" class="btn-add" style="width: 100%; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 10px;">Adicionar Recompensa</button>
             </form>
         </div>
-    </div>
+        <!-- PARCEIROS -->
+        <div class="panel" id="panelParceiros" style="display: none;">
+            <h2>Gerenciar Parceiros</h2>
+            <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 15px;">Aqui você pode desbloquear pessoas que você recusou ou remover parceiros atuais. O saldo acumulado da dupla não é apagado.</p>
+            <ul class="item-list" id="partnersList"></ul>
+        </div>
     </div> <!-- Fim do appContent -->
 
     <!-- Importação do Firebase -->
@@ -678,6 +684,32 @@
             }
         }
 
+        let pendingInvites = new Set();
+        
+        function acceptInvite(email) {
+            if (!state.partners) state.partners = {};
+            state.partners[email] = 'accepted';
+            saveState();
+            render();
+        }
+
+        function rejectInvite(email) {
+            if (!state.partners) state.partners = {};
+            state.partners[email] = 'rejected';
+            saveState();
+            render();
+        }
+
+        function removePartner(email) {
+            if (confirm(`Tem certeza que deseja remover ${email} das suas conexões?`)) {
+                if (state.partners) {
+                    delete state.partners[email];
+                    saveState();
+                    render();
+                }
+            }
+        }
+
         function toggleNotes(id) {
             const notesDiv = document.getElementById('notes-' + id);
             if (notesDiv) {
@@ -723,9 +755,15 @@
             const myEmail = firebase.auth().currentUser.email;
             
             if (isShared && partnerEmail) {
+                if (!state.partners) state.partners = {};
+                if (state.partners[partnerEmail] !== 'accepted') {
+                    state.partners[partnerEmail] = 'accepted';
+                    saveState();
+                }
                 db.collection('shared_tasks').add({
                     name, points, frequency, notes,
                     members: [myEmail, partnerEmail],
+                    createdBy: myEmail,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             } else {
@@ -751,9 +789,15 @@
             const myEmail = firebase.auth().currentUser.email;
 
             if (isShared && partnerEmail) {
+                if (!state.partners) state.partners = {};
+                if (state.partners[partnerEmail] !== 'accepted') {
+                    state.partners[partnerEmail] = 'accepted';
+                    saveState();
+                }
                 db.collection('shared_rewards').add({
                     name, points, prereqs,
                     members: [myEmail, partnerEmail],
+                    createdBy: myEmail,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             } else {
@@ -768,13 +812,35 @@
 
         // Renderização da Interface
         function render() {
+            if (!state.partners) state.partners = {};
+            const myEmail = firebase.auth().currentUser ? firebase.auth().currentUser.email : '';
+            pendingInvites.clear();
+            
+            const filterSharedItem = (item) => {
+                if (!item.members) return false;
+                const other = item.members.find(m => m !== myEmail);
+                if (!other) return true;
+                if (item.createdBy === myEmail) return true;
+                
+                const status = state.partners[other];
+                if (status === 'accepted') return true;
+                if (status !== 'rejected') pendingInvites.add(other);
+                return false;
+            };
+
+            const filteredSharedTasks = (sharedState.tasks || []).filter(filterSharedItem);
+            const filteredSharedRewards = (sharedState.rewards || []).filter(filterSharedItem);
+
             // Calcular saldos
             const indPoints = state.totalPoints || 0;
             
             let shPoints = 0;
             if (sharedState && sharedState.balances) {
-                Object.values(sharedState.balances).forEach(val => {
-                    shPoints += val.points;
+                Object.entries(sharedState.balances).forEach(([docId, val]) => {
+                    const other = docId.split('_').find(m => m !== myEmail);
+                    if (!other || state.partners[other] === 'accepted') {
+                        shPoints += val.points || 0;
+                    }
                 });
             }
             
@@ -784,10 +850,37 @@
             if (document.getElementById('sharedPoints')) document.getElementById('sharedPoints').innerText = shPoints;
             if (document.getElementById('totalPoints')) document.getElementById('totalPoints').innerText = totPoints;
 
+            // Renderizar Banner de Convites
+            let inviteBanner = document.getElementById('inviteBanner');
+            if (!inviteBanner) {
+                inviteBanner = document.createElement('div');
+                inviteBanner.id = 'inviteBanner';
+                const container = document.getElementById('panelTarefas').parentNode;
+                container.insertBefore(inviteBanner, container.firstChild);
+            }
+            
+            if (pendingInvites.size > 0) {
+                let html = '';
+                pendingInvites.forEach(email => {
+                    html += `
+                        <div style="background: var(--accent-blue); padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <span style="font-size: 0.9em;">💌 <b>${email}</b> enviou um convite de parceria!</span>
+                            <div>
+                                <button onclick="acceptInvite('${email}')" style="background: var(--accent-green); border: none; color: white; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 5px;">Aceitar</button>
+                                <button onclick="rejectInvite('${email}')" style="background: var(--accent-red); border: none; color: white; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Recusar</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                inviteBanner.innerHTML = html;
+            } else {
+                inviteBanner.innerHTML = '';
+            }
+
             // Renderizar Tarefas
             let allTasks = [
                 ...(state.tasks || []).map(t => ({...t, isShared: false})),
-                ...(sharedState.tasks || []).map(t => ({...t, isShared: true}))
+                ...filteredSharedTasks.map(t => ({...t, isShared: true}))
             ];
 
             const taskList = document.getElementById('taskList');
@@ -855,7 +948,7 @@
             // Renderizar Recompensas
             let allRewards = [
                 ...(state.rewards || []).map(r => ({...r, isShared: false})),
-                ...(sharedState.rewards || []).map(r => ({...r, isShared: true}))
+                ...filteredSharedRewards.map(r => ({...r, isShared: true}))
             ];
             
             const rewardList = document.getElementById('rewardList');
@@ -953,6 +1046,43 @@
                     });
                 }
             }
+
+            // Renderizar Parceiros
+            const partnersList = document.getElementById('partnersList');
+            if (partnersList) {
+                partnersList.innerHTML = '';
+                const emails = Object.keys(state.partners || {});
+                if (emails.length === 0) {
+                    partnersList.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum parceiro encontrado.</li>';
+                } else {
+                    emails.forEach(email => {
+                        const status = state.partners[email];
+                        const isAccepted = status === 'accepted';
+                        const statusTag = isAccepted 
+                            ? '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.8em;">Ativo</span>'
+                            : '<span style="background: var(--accent-red); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.8em;">Bloqueado</span>';
+                            
+                        const actionBtn = isAccepted
+                            ? `<button class="btn-delete" onclick="removePartner('${email}')" title="Remover Parceiro">Remover</button>`
+                            : `<button class="btn-task" onclick="acceptInvite('${email}')" title="Desbloquear e Aceitar">Desbloquear</button>`;
+                            
+                        const li = document.createElement('li');
+                        li.className = 'item';
+                        li.innerHTML = `
+                            <div class="item-header">
+                                <div class="item-info">
+                                    <span class="item-title">${email}</span>
+                                    ${statusTag}
+                                </div>
+                                <div class="action-group">
+                                    ${actionBtn}
+                                </div>
+                            </div>
+                        `;
+                        partnersList.appendChild(li);
+                    });
+                }
+            }
         }
 
         function toggleHistory() {
@@ -982,9 +1112,13 @@
         function showTab(tabId) {
             document.getElementById('panelTarefas').style.display = (tabId === 'tarefas') ? 'block' : 'none';
             document.getElementById('panelRecompensas').style.display = (tabId === 'recompensas') ? 'block' : 'none';
+            const panelParceiros = document.getElementById('panelParceiros');
+            if (panelParceiros) panelParceiros.style.display = (tabId === 'parceiros') ? 'block' : 'none';
             
             document.getElementById('tabTarefas').className = (tabId === 'tarefas') ? 'active' : '';
             document.getElementById('tabRecompensas').className = (tabId === 'recompensas') ? 'active' : '';
+            const tabParceiros = document.getElementById('tabParceiros');
+            if (tabParceiros) tabParceiros.className = (tabId === 'parceiros') ? 'active' : '';
             
             toggleMenu();
         }
