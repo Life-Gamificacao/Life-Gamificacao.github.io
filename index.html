@@ -601,23 +601,43 @@
             if (isShared) {
                 const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
                 if (task) {
-                    const balanceId = task.members.slice().sort().join('_');
                     const myEmail = firebase.auth().currentUser.email;
-                    
-                    const currentCompletions = task.completions || 0;
-                    db.collection('shared_tasks').doc(taskId).update({
-                        completions: currentCompletions + 1
-                    });
-
-                    const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
                     const date = new Date().toLocaleString('pt-BR');
-                    const logEntry = { type: 'earn', name: task.name, points: task.points, date: date, user: myEmail, isShared: true };
                     
-                    db.collection('shared_balances').doc(balanceId).set({
-                        points: currentBalance + task.points,
-                        members: task.members,
-                        history: firebase.firestore.FieldValue.arrayUnion(logEntry)
-                    }, { merge: true });
+                    // 1. Ganho Individual Imediato
+                    state.totalPoints += task.points;
+                    state.history.unshift({ type: 'earn', name: "Você fez a tarefa " + task.name + " (Ganho individual)", points: task.points, date: date, isShared: false });
+                    saveState();
+                    render();
+                    
+                    // 2. Atualização da Fila
+                    let currentWaiting = task.waitingFor || task.members.slice();
+                    let newWaiting = currentWaiting.filter(email => email !== myEmail);
+                    
+                    // 3. Checagem de Conclusão da Dupla
+                    if (newWaiting.length === 0) {
+                        // A dupla concluiu! Deposita no saldo compartilhado.
+                        const balanceId = task.members.slice().sort().join('_');
+                        const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
+                        const logEntry = { type: 'earn', name: "Ciclo da tarefa " + task.name + " concluído pela dupla! (Ganho compartilhado)", points: task.points, date: date, user: "Dupla", isShared: true };
+                        
+                        db.collection('shared_balances').doc(balanceId).set({
+                            points: currentBalance + task.points,
+                            members: task.members,
+                            history: firebase.firestore.FieldValue.arrayUnion(logEntry)
+                        }, { merge: true });
+                        
+                        // Reseta a fila para a próxima vez
+                        db.collection('shared_tasks').doc(taskId).update({
+                            waitingFor: task.members,
+                            completions: (task.completions || 0) + 1
+                        });
+                    } else {
+                        // Alguém ainda não fez, apenas atualiza a fila
+                        db.collection('shared_tasks').doc(taskId).update({
+                            waitingFor: newWaiting
+                        });
+                    }
                 }
             } else {
                 const task = state.tasks.find(t => String(t.id) === String(taskId));
@@ -805,6 +825,7 @@
                 db.collection('shared_tasks').add({
                     name, points, frequency, notes,
                     members: [myEmail, partnerEmail],
+                    waitingFor: [myEmail, partnerEmail],
                     createdBy: myEmail,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -949,16 +970,41 @@
                     tasksInFreq.forEach(task => {
                         const li = document.createElement('li');
                         li.className = 'item';
-                        const badge = task.isShared ? '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7em; margin-left: 5px;">Conjunto</span>' : '';
+                        
+                        let badge = '';
+                        let waitingTag = '';
+                        let actionDisabled = '';
+                        let btnStyle = '';
+                        
+                        if (task.isShared) {
+                            badge = '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7em; margin-left: 5px;">Conjunto</span>';
+                            const waiting = task.waitingFor || task.members;
+                            if (waiting && waiting.length > 0) {
+                                const amIWaiting = waiting.includes(myEmail);
+                                const isOtherWaiting = waiting.find(m => m !== myEmail);
+                                
+                                if (amIWaiting && !isOtherWaiting) {
+                                    // Parceiro já fez, só falta eu!
+                                    waitingTag = `<div style="font-size: 0.8em; color: var(--accent-green); margin-top: 5px; font-weight: bold;">🔥 Parceiro já concluiu! Só falta você!</div>`;
+                                } else if (!amIWaiting && isOtherWaiting) {
+                                    // Eu já fiz, parceiro não
+                                    waitingTag = `<div style="font-size: 0.8em; color: orange; margin-top: 5px; font-weight: bold;">⏳ Aguardando parceiro...</div>`;
+                                    actionDisabled = 'disabled';
+                                    btnStyle = 'opacity: 0.5; cursor: not-allowed;';
+                                }
+                            }
+                        }
+
                         li.innerHTML = `
                             <div class="item-header">
                                 <div class="item-info">
                                     <span class="item-title">${task.name} ${badge}</span>
                                     <span class="item-points">+${task.points} Pts</span>
+                                    ${waitingTag}
                                 </div>
                                 <div class="action-group">
                                     ${task.notes ? `<button class="btn-delete" onclick="toggleNotes('${task.id}')" title="Ver Anotações">📝</button>` : ''}
-                                    <button class="btn-task" onclick="completeTask('${task.id}', ${task.isShared})">Feito</button>
+                                    <button class="btn-task" style="${btnStyle}" ${actionDisabled} onclick="completeTask('${task.id}', ${task.isShared})">Feito</button>
                                     <button class="btn-delete" onclick="deleteTask('${task.id}', ${task.isShared})" title="Remover Tarefa">X</button>
                                 </div>
                             </div>
