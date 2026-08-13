@@ -306,6 +306,7 @@
                 <a href="#" id="tabTarefas" class="active" onclick="showTab('tarefas')">🎯 Tarefas</a>
                 <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
                 <a href="#" id="tabParceiros" onclick="showTab('parceiros')">👥 Parceiros</a>
+                <a href="#" id="tabAjuda" onclick="showTab('ajuda')">❓ Ajuda</a>
             </div>
             <div style="margin-top: auto; padding: 20px; border-top: 1px solid var(--border); text-align: center;">
                 <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;">Modo Visitante</div>
@@ -415,6 +416,42 @@
             <h2>Gerenciar Parceiros</h2>
             <p style="color: var(--text-muted); font-size: 0.9em; margin-bottom: 15px;">Aqui você pode desbloquear pessoas que você recusou ou remover parceiros atuais. O saldo acumulado da dupla não é apagado.</p>
             <ul class="item-list" id="partnersList"></ul>
+        </div>
+        
+        <!-- AJUDA -->
+        <div class="panel" id="panelAjuda" style="display: none;">
+            <h2>Como Funciona o Jogo?</h2>
+            
+            <div style="background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--accent-blue);">
+                <h3 style="color: var(--accent-blue); margin-bottom: 5px;">💰 Pontos e Saldos</h3>
+                <p style="font-size: 0.9em; color: var(--text-muted);">
+                    Você possui dois tipos de saldos: <br>
+                    <b>1. Pontos Individuais:</b> Ganhos ao fazer suas próprias tarefas.<br>
+                    <b>2. Pontos Compartilhados:</b> Ganhos apenas quando você e um parceiro concluem juntos uma Tarefa Compartilhada.
+                </p>
+            </div>
+
+            <div style="background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--accent-green);">
+                <h3 style="color: var(--accent-green); margin-bottom: 5px;">🤝 Tarefas em Dupla (A Regra de Ouro)</h3>
+                <p style="font-size: 0.9em; color: var(--text-muted);">
+                    Quando você cria uma tarefa e a compartilha com alguém, vocês formam um ciclo de co-dependência:
+                </p>
+                <ul style="font-size: 0.9em; color: var(--text-muted); margin-left: 20px; margin-top: 10px;">
+                    <li>Ao clicar em "Feito", <b>você ganha seus pontos individuais na hora!</b></li>
+                    <li>Porém, os <b>pontos compartilhados</b> só caem na conta da dupla quando o seu parceiro também clicar em "Feito".</li>
+                    <li>O aplicativo usa tags inteligentes (🔥 Verde e ⏳ Laranja) para avisar quem já fez e quem está enrolando.</li>
+                </ul>
+            </div>
+
+            <div style="background: #222; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary);">
+                <h3 style="color: var(--primary); margin-bottom: 5px;">🎁 Resgatando Recompensas</h3>
+                <p style="font-size: 0.9em; color: var(--text-muted);">
+                    As recompensas também podem ser individuais ou compartilhadas. <br><br>
+                    Se você criar uma <b>Recompensa Individual</b> (ex: Comer um doce), ela descontará apenas do seu saldo de Pontos Individuais.<br><br>
+                    Se você criar uma <b>Recompensa Compartilhada</b> (ex: Cinema no final de semana), ela descontará do Saldo Compartilhado da dupla, e você só conseguirá resgatá-la se a dupla tiver pontos juntos suficientes!
+                </p>
+            </div>
+            
         </div>
     </div> <!-- Fim do appContent -->
 
@@ -1206,11 +1243,15 @@
             document.getElementById('panelRecompensas').style.display = (tabId === 'recompensas') ? 'block' : 'none';
             const panelParceiros = document.getElementById('panelParceiros');
             if (panelParceiros) panelParceiros.style.display = (tabId === 'parceiros') ? 'block' : 'none';
+            const panelAjuda = document.getElementById('panelAjuda');
+            if (panelAjuda) panelAjuda.style.display = (tabId === 'ajuda') ? 'block' : 'none';
             
             document.getElementById('tabTarefas').className = (tabId === 'tarefas') ? 'active' : '';
             document.getElementById('tabRecompensas').className = (tabId === 'recompensas') ? 'active' : '';
             const tabParceiros = document.getElementById('tabParceiros');
             if (tabParceiros) tabParceiros.className = (tabId === 'parceiros') ? 'active' : '';
+            const tabAjuda = document.getElementById('tabAjuda');
+            if (tabAjuda) tabAjuda.className = (tabId === 'ajuda') ? 'active' : '';
             
             toggleMenu();
         }
