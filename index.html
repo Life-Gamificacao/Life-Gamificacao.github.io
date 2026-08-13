@@ -338,14 +338,20 @@
                     <div style="font-size: 2.2em; font-weight: bold; color: white;" id="totalPoints">0</div>
                 </div>
             </div>
-            <div>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                 <button class="btn-reset" onclick="resetPoints()">Zerar Pontos</button>
-                <button id="toggleHistoryBtn" class="btn-history" onclick="toggleHistory()">Ver Detalhes</button>
+                <button id="toggleHistoryIndBtn" class="btn-history" onclick="toggleHistory('ind')">Extrato Individual</button>
+                <button id="toggleHistoryShBtn" class="btn-history" onclick="toggleHistory('sh')">Extrato Compartilhado</button>
             </div>
             
-            <!-- Painel de Histórico (Oculto por padrão) -->
-            <div id="historyPanel" class="history-panel" style="display: none;">
-                <ul class="history-list" id="historyList"></ul>
+            <!-- Painéis de Histórico (Ocultos por padrão) -->
+            <div id="historyPanelInd" class="history-panel" style="display: none; margin-top: 15px;">
+                <h4 style="text-align: center; color: var(--accent-blue); margin-bottom: 10px;">Histórico Individual</h4>
+                <ul class="history-list" id="historyListInd"></ul>
+            </div>
+            <div id="historyPanelSh" class="history-panel" style="display: none; margin-top: 15px;">
+                <h4 style="text-align: center; color: var(--accent-green); margin-bottom: 10px;">Histórico Compartilhado</h4>
+                <ul class="history-list" id="historyListSh"></ul>
             </div>
         </div>
 
@@ -1127,18 +1133,9 @@
                 rewardList.appendChild(li);
             });
 
-            // Renderizar Histórico (Juntando local e compartilhado)
-            let allHistory = [...(state.history || [])];
-            
-            if (sharedState && sharedState.balances) {
-                Object.values(sharedState.balances).forEach(val => {
-                    if (val.history) {
-                        allHistory = allHistory.concat(val.history);
-                    }
-                });
-            }
-            
-            allHistory.sort((a, b) => {
+            // Renderizar Histórico Individual
+            let indHistory = [...(state.history || [])];
+            indHistory.sort((a, b) => {
                 const parseD = d => {
                     if (!d) return 0;
                     const parts = d.split(' ');
@@ -1151,13 +1148,57 @@
                 return parseD(b.date) - parseD(a.date);
             });
 
-            const historyList = document.getElementById('historyList');
-            if (historyList) {
-                historyList.innerHTML = '';
-                if (allHistory.length === 0) {
-                    historyList.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum histórico ainda.</li>';
+            const historyListInd = document.getElementById('historyListInd');
+            if (historyListInd) {
+                historyListInd.innerHTML = '';
+                if (indHistory.length === 0) {
+                    historyListInd.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum histórico individual ainda.</li>';
                 } else {
-                    allHistory.forEach(log => {
+                    indHistory.forEach(log => {
+                        const li = document.createElement('li');
+                        li.className = 'history-item';
+                        const isEarn = log.type === 'earn';
+                        li.innerHTML = `
+                            <span class="history-date">${log.date}</span>
+                            <span class="history-name">${log.name}</span>
+                            <span class="history-points ${isEarn ? 'earn' : 'spend'}">
+                                ${isEarn ? '+' : '-'}${log.points} Pts
+                            </span>
+                        `;
+                        historyListInd.appendChild(li);
+                    });
+                }
+            }
+
+            // Renderizar Histórico Compartilhado
+            let shHistory = [];
+            if (sharedState && sharedState.balances) {
+                Object.values(sharedState.balances).forEach(val => {
+                    if (val.history) {
+                        shHistory = shHistory.concat(val.history);
+                    }
+                });
+            }
+            shHistory.sort((a, b) => {
+                const parseD = d => {
+                    if (!d) return 0;
+                    const parts = d.split(' ');
+                    if (parts.length < 2) return 0;
+                    const ds = parts[0].split('/');
+                    const ts = parts[1].split(':');
+                    if (ds.length < 3 || ts.length < 3) return 0;
+                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime();
+                };
+                return parseD(b.date) - parseD(a.date);
+            });
+
+            const historyListSh = document.getElementById('historyListSh');
+            if (historyListSh) {
+                historyListSh.innerHTML = '';
+                if (shHistory.length === 0) {
+                    historyListSh.innerHTML = '<li style="text-align:center; color: var(--text-muted); padding: 10px;">Nenhum histórico compartilhado ainda.</li>';
+                } else {
+                    shHistory.forEach(log => {
                         const li = document.createElement('li');
                         li.className = 'history-item';
                         const isEarn = log.type === 'earn';
@@ -1169,7 +1210,7 @@
                                 ${isEarn ? '+' : '-'}${log.points} Pts
                             </span>
                         `;
-                        historyList.appendChild(li);
+                        historyListSh.appendChild(li);
                     });
                 }
             }
@@ -1212,17 +1253,34 @@
             }
         }
 
-        function toggleHistory() {
+        function toggleHistory(type) {
             if (!requireLogin()) return;
             
-            const panel = document.getElementById('historyPanel');
-            const btn = document.getElementById('toggleHistoryBtn');
-            if (panel.style.display === 'none') {
-                panel.style.display = 'block';
-                btn.innerText = 'Ocultar Detalhes';
-            } else {
-                panel.style.display = 'none';
-                btn.innerText = 'Ver Detalhes';
+            const panelInd = document.getElementById('historyPanelInd');
+            const panelSh = document.getElementById('historyPanelSh');
+            const btnInd = document.getElementById('toggleHistoryIndBtn');
+            const btnSh = document.getElementById('toggleHistoryShBtn');
+
+            if (type === 'ind') {
+                if (panelInd.style.display === 'none') {
+                    panelInd.style.display = 'block';
+                    panelSh.style.display = 'none';
+                    btnInd.innerText = 'Ocultar Individual';
+                    btnSh.innerText = 'Extrato Compartilhado';
+                } else {
+                    panelInd.style.display = 'none';
+                    btnInd.innerText = 'Extrato Individual';
+                }
+            } else if (type === 'sh') {
+                if (panelSh.style.display === 'none') {
+                    panelSh.style.display = 'block';
+                    panelInd.style.display = 'none';
+                    btnSh.innerText = 'Ocultar Compartilhado';
+                    btnInd.innerText = 'Extrato Individual';
+                } else {
+                    panelSh.style.display = 'none';
+                    btnSh.innerText = 'Extrato Compartilhado';
+                }
             }
         }
 
