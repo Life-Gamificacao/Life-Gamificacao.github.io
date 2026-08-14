@@ -307,6 +307,7 @@
                 <a href="#" id="tabRecompensas" onclick="showTab('recompensas')">🎁 Recompensas</a>
                 <a href="#" id="tabParceiros" onclick="showTab('parceiros')">👥 Parceiros</a>
                 <a href="#" id="tabAjuda" onclick="showTab('ajuda')">❓ Ajuda</a>
+                <a href="#" id="btnInstallPwa" style="display: none; background: rgba(52, 152, 219, 0.2); color: var(--accent-blue); font-weight: bold; border-left: 4px solid var(--accent-blue);" onclick="installPWA()">📥 Instalar App</a>
             </div>
             <div style="margin-top: auto; padding: 20px; border-top: 1px solid var(--border); text-align: center;">
                 <div id="userEmail" style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px; word-break: break-all;">Modo Visitante</div>
@@ -527,6 +528,84 @@
         }
 
         // Monitor de Login e Sincronização em Tempo Real
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('loginModal')) {
+                // Não fechar ao clicar fora, força o uso dos botões
+            }
+        }
+        
+        // PWA E INSTALAÇÃO NATIVA
+        
+        // 1. Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(() => {
+                console.log('Service Worker Registrado');
+            }).catch(err => console.log('Erro no Service Worker', err));
+        }
+
+        // 2. Interceptar prompt de instalação nativo (Android / Desktop)
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Impede o mini-infobar padrão de aparecer em alguns casos
+            e.preventDefault();
+            // Salva o evento para disparar quando o usuário clicar no nosso botão
+            deferredPrompt = e;
+            // Mostra o botão na sidebar
+            document.getElementById('btnInstallPwa').style.display = 'block';
+        });
+
+        function installPWA() {
+            const btn = document.getElementById('btnInstallPwa');
+            // Esconde nosso botão
+            btn.style.display = 'none';
+            if (deferredPrompt) {
+                // Dispara o prompt nativo do sistema
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('Usuário instalou o app');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+
+        // 3. Detecção e Tutorial para iOS Safari
+        function isIos() {
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            return /iphone|ipad|ipod/.test(userAgent);
+        }
+        function isInStandaloneMode() {
+            return ('standalone' in window.navigator) && (window.navigator.standalone);
+        }
+
+        if (isIos() && !isInStandaloneMode()) {
+            // Mostra o banner ensinando a instalar no iOS após 3 segundos
+            setTimeout(() => {
+                const iosBanner = document.createElement('div');
+                iosBanner.style.position = 'fixed';
+                iosBanner.style.bottom = '20px';
+                iosBanner.style.left = '50%';
+                iosBanner.style.transform = 'translateX(-50%)';
+                iosBanner.style.background = '#fff';
+                iosBanner.style.color = '#000';
+                iosBanner.style.padding = '15px';
+                iosBanner.style.borderRadius = '12px';
+                iosBanner.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+                iosBanner.style.zIndex = '9999';
+                iosBanner.style.width = '90%';
+                iosBanner.style.maxWidth = '400px';
+                iosBanner.style.textAlign = 'center';
+                iosBanner.style.fontSize = '0.9em';
+                iosBanner.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 8px;">Instale o App no iPhone! 📱</div>
+                    Para não precisar abrir o Safari toda vez, clique em <b>Compartilhar</b> <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; display: inline-block; margin-bottom: -2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg> abaixo e depois em <b>Adicionar à Tela de Início</b>.
+                    <button onclick="this.parentElement.style.display='none'" style="display: block; margin: 12px auto 0; background: var(--accent-blue); color: white; font-weight: bold; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer;">Entendi</button>
+                `;
+                document.body.appendChild(iosBanner);
+            }, 3000);
+        }
+
         auth.onAuthStateChanged((user) => {
             const loginModal = document.getElementById('loginModal');
             
