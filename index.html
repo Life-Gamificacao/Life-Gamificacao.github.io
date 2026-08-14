@@ -513,6 +513,18 @@
             history: []
         };
         let sharedUnsubscribers = [];
+        
+        let collapsedCategories = {
+            'Diária': false,
+            'Semanal': false,
+            'Quinzenal': false,
+            'Mensal': false
+        };
+
+        function toggleCategory(freq) {
+            collapsedCategories[freq] = !collapsedCategories[freq];
+            render();
+        }
 
         // Monitor de Login e Sincronização em Tempo Real
         auth.onAuthStateChanged((user) => {
@@ -1018,15 +1030,21 @@
                 const tasksInFreq = allTasks.filter(t => (t.frequency || 'Diária') === freq);
                 
                 if (tasksInFreq.length > 0) {
+                    const isCollapsed = collapsedCategories[freq];
+                    
                     const freqHeader = document.createElement('h3');
-                    freqHeader.innerText = freq;
+                    freqHeader.innerHTML = `${freq} <span style="float: right; font-size: 1.2em; color: var(--primary);">${isCollapsed ? '▼' : '▲'}</span>`;
                     freqHeader.style.color = 'var(--text-muted)';
                     freqHeader.style.fontSize = '0.9em';
                     freqHeader.style.textTransform = 'uppercase';
                     freqHeader.style.margin = '15px 0 5px 0';
                     freqHeader.style.borderBottom = '1px solid #333';
                     freqHeader.style.paddingBottom = '5px';
+                    freqHeader.style.cursor = 'pointer';
+                    freqHeader.onclick = () => toggleCategory(freq);
                     taskList.appendChild(freqHeader);
+                    
+                    if (!isCollapsed) {
                     
                     tasksInFreq.forEach(task => {
                         const li = document.createElement('li');
@@ -1073,6 +1091,7 @@
                         `;
                         taskList.appendChild(li);
                     });
+                    }
                 }
             });
 
