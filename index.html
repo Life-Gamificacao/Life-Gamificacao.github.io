@@ -1156,12 +1156,13 @@
             indHistory.sort((a, b) => {
                 const parseD = d => {
                     if (!d) return 0;
-                    const parts = d.split(' ');
+                    const cleanD = d.replace(',', '');
+                    const parts = cleanD.split(' ');
                     if (parts.length < 2) return 0;
                     const ds = parts[0].split('/');
                     const ts = parts[1].split(':');
                     if (ds.length < 3 || ts.length < 3) return 0;
-                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime();
+                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime() || 0;
                 };
                 return parseD(b.date) - parseD(a.date);
             });
@@ -1200,12 +1201,13 @@
             shHistory.sort((a, b) => {
                 const parseD = d => {
                     if (!d) return 0;
-                    const parts = d.split(' ');
+                    const cleanD = d.replace(',', '');
+                    const parts = cleanD.split(' ');
                     if (parts.length < 2) return 0;
                     const ds = parts[0].split('/');
                     const ts = parts[1].split(':');
                     if (ds.length < 3 || ts.length < 3) return 0;
-                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime();
+                    return new Date(ds[2], ds[1]-1, ds[0], ts[0], ts[1], ts[2]).getTime() || 0;
                 };
                 return parseD(b.date) - parseD(a.date);
             });
