@@ -804,51 +804,28 @@
             }
         }
 
-        function redeemReward(rewardId, isShared = false) {
+        function redeemReward(rewardId, isShared = false, btnElement = null) {
             if (!requireLogin()) return;
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerText = "Aguarde...";
+            }
             
             if (isShared) {
                 const reward = sharedState.rewards.find(r => String(r.id) === String(rewardId));
                 if (reward) {
-                    const balanceId = reward.members.slice().sort().join('_');
-                    const currentBalance = sharedState.balances[balanceId] ? sharedState.balances[balanceId].points : 0;
-                    
-                    let hasAllPrereqs = true;
-                    if (reward.prereqs && reward.prereqs.length > 0) {
-                        reward.prereqs.forEach(prereqId => {
-                            const t = sharedState.tasks.find(t => t.id === prereqId) || state.tasks.find(t => String(t.id) === String(prereqId));
-                            if (!t || (t.completions || 0) < 1) hasAllPrereqs = false;
-                        });
+                    const myEmail = firebase.auth().currentUser.email;
+                    const partnerEmail = reward.members.find(m => m !== myEmail);
+                    if (!partnerEmail) {
+                        if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Resgatar"; }
+                        return;
                     }
                     
-                    if (currentBalance >= reward.points && hasAllPrereqs) {
-                        const myEmail = firebase.auth().currentUser.email;
-                        const date = new Date().toLocaleString('pt-BR');
-                        const logEntry = { type: 'spend', name: reward.name, points: reward.points, date: date, user: myEmail, isShared: true };
-                        
-                        db.collection('shared_balances').doc(balanceId).set({
-                            points: currentBalance - reward.points,
-                            members: reward.members,
-                            history: firebase.firestore.FieldValue.arrayUnion(logEntry)
-                        }, { merge: true });
-                        
-                        if (reward.prereqs) {
-                            reward.prereqs.forEach(prereqId => {
-                                const tShared = sharedState.tasks.find(t => t.id === prereqId);
-                                if (tShared) {
-                                    db.collection('shared_tasks').doc(tShared.id).update({ completions: (tShared.completions || 1) - 1 });
-                                } else {
-                                    const tLocal = state.tasks.find(t => String(t.id) === String(prereqId));
-                                    if (tLocal) {
-                                        tLocal.completions -= 1;
-                                        saveState();
-                                    }
-                                }
-                            });
-                        }
-                    } else {
-                        alert("A dupla não possui os requisitos (pontos ou tarefas) para esta recompensa compartilhada!");
-                    }
+                    db.collection('shared_rewards').doc(rewardId).update({
+                        waitingFor: [partnerEmail]
+                    }).catch(err => {
+                        if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Resgatar"; }
+                    });
                 }
             } else {
                 const reward = state.rewards.find(r => String(r.id) === String(rewardId));
@@ -938,6 +915,74 @@
                     render();
                 }
             }
+        }
+
+        function approveReward(rewardId, btnElement = null) {
+            if (!requireLogin()) return;
+            const reward = sharedState.rewards.find(r => String(r.id) === String(rewardId));
+            if (!reward) return;
+            
+            const myEmail = firebase.auth().currentUser.email;
+            if (!reward.waitingFor || !reward.waitingFor.includes(myEmail)) return;
+            
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerText = "Processando...";
+            }
+            
+            const balanceId = reward.members.slice().sort().join('_');
+            const date = new Date().toLocaleString('pt-BR');
+            const logEntry = { type: 'spend', name: "Resgate de " + reward.name + " aprovado!", points: reward.points, date: date, user: "Dupla", isShared: true };
+            
+            const balanceRef = db.collection('shared_balances').doc(balanceId);
+            const rewardRef = db.collection('shared_rewards').doc(rewardId);
+            
+            db.runTransaction((transaction) => {
+                return transaction.get(balanceRef).then((doc) => {
+                    const currentBalance = doc.exists ? doc.data().points : 0;
+                    
+                    if (currentBalance >= reward.points) {
+                        transaction.set(balanceRef, {
+                            points: currentBalance - reward.points,
+                            members: reward.members,
+                            history: firebase.firestore.FieldValue.arrayUnion(logEntry)
+                        }, { merge: true });
+                        
+                        transaction.update(rewardRef, { waitingFor: firebase.firestore.FieldValue.delete() });
+                        return true;
+                    } else {
+                        return Promise.reject("Saldo compartilhado insuficiente no momento da aprovação!");
+                    }
+                });
+            }).then(() => {
+                // Reduz as tarefas pré-requisito se der sucesso
+                if (reward.prereqs) {
+                    reward.prereqs.forEach(prereqId => {
+                        const tShared = sharedState.tasks.find(t => String(t.id) === String(prereqId));
+                        if (tShared) {
+                            db.collection('shared_tasks').doc(tShared.id).update({ completions: (tShared.completions || 1) - 1 });
+                        } else {
+                            const tLocal = state.tasks.find(t => String(t.id) === String(prereqId));
+                            if (tLocal) {
+                                tLocal.completions -= 1;
+                                saveState();
+                            }
+                        }
+                    });
+                }
+            }).catch((err) => {
+                alert("Erro ao aprovar: " + err);
+                db.collection('shared_rewards').doc(rewardId).update({ waitingFor: firebase.firestore.FieldValue.delete() });
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerText = "Aprovar";
+                }
+            });
+        }
+
+        function cancelRewardRequest(rewardId) {
+            if (!requireLogin()) return;
+            db.collection('shared_rewards').doc(rewardId).update({ waitingFor: firebase.firestore.FieldValue.delete() });
         }
 
         function deleteReward(id, isShared = false) {
@@ -1235,6 +1280,20 @@
                 const badge = reward.isShared ? '<span style="background: var(--accent-green); color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7em; margin-left: 5px;">Conjunta</span>' : '';
                 const li = document.createElement('li');
                 li.className = 'item reward';
+                let actionBtnHTML = `<button class="btn-reward" ${!canRedeem ? 'disabled' : ''} onclick="redeemReward('${reward.id}', ${reward.isShared}, this)">Resgatar</button>`;
+                
+                if (reward.isShared && reward.waitingFor && reward.waitingFor.length > 0) {
+                    const amIWaiting = reward.waitingFor.includes(myEmail);
+                    if (amIWaiting) {
+                        statusText += `<div style="font-size: 0.8em; color: orange; margin-top: 5px; font-weight: bold;">Parceiro quer resgatar!</div>`;
+                        actionBtnHTML = `<button class="btn-reward" style="background: orange; color: black; font-weight: bold;" onclick="approveReward('${reward.id}', this)">Aprovar</button>
+                                         <button class="btn-delete" style="padding: 5px 10px;" onclick="cancelRewardRequest('${reward.id}')">Recusar</button>`;
+                    } else {
+                        statusText += `<div style="font-size: 0.8em; color: var(--text-muted); margin-top: 5px; font-weight: bold;">⏳ Aguardando parceiro aprovar...</div>`;
+                        actionBtnHTML = `<button class="btn-delete" style="background: gray; width: auto; padding: 5px 10px;" onclick="cancelRewardRequest('${reward.id}')">Cancelar Pedido</button>`;
+                    }
+                }
+
                 li.innerHTML = `
                     <div class="item-info">
                         <span class="item-title">${reward.name} ${badge}</span>
@@ -1242,8 +1301,8 @@
                         ${statusText}
                     </div>
                     <div class="action-group">
-                        <button class="btn-reward" ${!canRedeem ? 'disabled' : ''} onclick="redeemReward('${reward.id}', ${reward.isShared})">Resgatar</button>
-                        <button class="btn-delete" onclick="deleteReward('${reward.id}', ${reward.isShared})" title="Remover Recompensa">X</button>
+                        ${actionBtnHTML}
+                        ${!(reward.isShared && reward.waitingFor && reward.waitingFor.length > 0 && reward.waitingFor.includes(myEmail)) ? `<button class="btn-delete" onclick="deleteReward('${reward.id}', ${reward.isShared})" title="Remover Recompensa">X</button>` : ''}
                     </div>
                 `;
                 rewardList.appendChild(li);
