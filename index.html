@@ -729,8 +729,14 @@
         }
 
         // Ações de Pontuação
-        function completeTask(taskId, isShared = false) {
+        function completeTask(taskId, isShared = false, btnElement = null) {
             if (!requireLogin()) return;
+            if (!confirm("Tem certeza que concluiu esta tarefa?")) return;
+            
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerText = "Aguarde...";
+            }
             
             if (isShared) {
                 const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
@@ -738,17 +744,20 @@
                     const myEmail = firebase.auth().currentUser.email;
                     const date = new Date().toLocaleString('pt-BR');
                     
-                    // Bloqueio imediato local (Optimistic Update) para evitar múltiplos cliques na mesma hora
                     let currentWaiting = task.waitingFor || task.members.slice();
-                    if (!currentWaiting.includes(myEmail)) return; // Se já não estiver na lista, não faz nada
+                    if (!currentWaiting.includes(myEmail)) {
+                        if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Feito"; }
+                        return;
+                    }
                     
                     task.waitingFor = currentWaiting.filter(email => email !== myEmail);
+                    task.lastCompleted = date;
                     
                     // 1. Ganho Individual Imediato
                     state.totalPoints += task.points;
                     state.history.unshift({ type: 'earn', name: "Você fez a tarefa " + task.name + " (Ganho individual)", points: task.points, date: date, isShared: false });
                     saveState();
-                    render(); // Renderiza a tela, agora a tag já mudará para "Aguardando..." localmente!
+                    render();
                     
                     const taskRef = db.collection('shared_tasks').doc(taskId);
                     
@@ -781,12 +790,13 @@
                                     
                                     transaction.update(taskRef, {
                                         waitingFor: data.members,
-                                        completions: (data.completions || 0) + 1
+                                        completions: (data.completions || 0) + 1,
+                                        lastCompleted: date
                                     });
                                 });
                             } else {
                                 // Alguém ainda não fez, apenas atualiza a fila
-                                transaction.update(taskRef, { waitingFor: newWaitingServer });
+                                transaction.update(taskRef, { waitingFor: newWaitingServer, lastCompleted: date });
                             }
                         });
                     }).catch(err => console.error("Erro ao sincronizar tarefa: ", err));
@@ -797,6 +807,7 @@
                     state.totalPoints += task.points;
                     task.completions = (task.completions || 0) + 1;
                     const date = new Date().toLocaleString('pt-BR');
+                    task.lastCompleted = date;
                     state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date, isShared: false });
                     saveState();
                     render();
@@ -1203,11 +1214,12 @@
                                 <div class="item-info">
                                     <span class="item-title">${task.name} ${badge}</span>
                                     <span class="item-points">+${task.points} Pts</span>
+                                    ${task.lastCompleted ? `<div style="font-size: 0.75em; color: var(--text-muted); margin-top: 2px;">Última vez: ${task.lastCompleted}</div>` : ''}
                                     ${waitingTag}
                                 </div>
                                 <div class="action-group">
                                     ${task.notes ? `<button class="btn-delete" onclick="toggleNotes('${task.id}')" title="Ver Anotações">📝</button>` : ''}
-                                    <button class="btn-task" style="${btnStyle}" ${actionDisabled} onclick="completeTask('${task.id}', ${task.isShared})">Feito</button>
+                                    <button class="btn-task" style="${btnStyle}" ${actionDisabled} onclick="completeTask('${task.id}', ${task.isShared}, this)">Feito</button>
                                     <button class="btn-delete" onclick="deleteTask('${task.id}', ${task.isShared})" title="Remover Tarefa">X</button>
                                 </div>
                             </div>
