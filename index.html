@@ -360,6 +360,7 @@
         <!-- TAREFAS -->
         <div class="panel" id="panelTarefas">
             <h2>Tarefas (Gerar Pontos)</h2>
+            <input type="text" id="searchTaskInput" placeholder="🔍 Buscar tarefa..." oninput="render()" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
             <ul class="item-list" id="taskList"></ul>
             <form class="add-form" id="formTask" style="flex-direction: column;">
                 <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
@@ -391,6 +392,7 @@
         <!-- RECOMPENSAS -->
         <div class="panel" id="panelRecompensas" style="display: none;">
             <h2>Recompensas (Gastar Pontos)</h2>
+            <input type="text" id="searchRewardInput" placeholder="🔍 Buscar recompensa..." oninput="render()" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white;">
             <ul class="item-list" id="rewardList"></ul>
             <form class="add-form" id="formReward" style="flex-direction: column;">
                 <div style="display: flex; flex-wrap: wrap; gap: 10px; width: 100%;">
@@ -1160,6 +1162,12 @@
                 ...filteredSharedTasks.map(t => ({...t, isShared: true}))
             ];
 
+            const searchTaskValue = document.getElementById('searchTaskInput') ? document.getElementById('searchTaskInput').value.toLowerCase() : '';
+            if (searchTaskValue) {
+                allTasks = allTasks.filter(t => t.name.toLowerCase().includes(searchTaskValue) || (t.notes && t.notes.toLowerCase().includes(searchTaskValue)));
+            }
+
+
             const taskList = document.getElementById('taskList');
             taskList.innerHTML = '';
             
@@ -1260,6 +1268,11 @@
                 ...(state.rewards || []).map(r => ({...r, isShared: false})),
                 ...filteredSharedRewards.map(r => ({...r, isShared: true}))
             ];
+            
+            const searchRewardValue = document.getElementById('searchRewardInput') ? document.getElementById('searchRewardInput').value.toLowerCase() : '';
+            if (searchRewardValue) {
+                allRewards = allRewards.filter(r => r.name.toLowerCase().includes(searchRewardValue));
+            }
             
             const rewardList = document.getElementById('rewardList');
             rewardList.innerHTML = '';
