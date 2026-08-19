@@ -817,6 +817,8 @@
 
         function redeemReward(rewardId, isShared = false, btnElement = null) {
             if (!requireLogin()) return;
+            if (!confirm("Tem certeza que deseja resgatar esta recompensa?")) return;
+            
             if (btnElement) {
                 btnElement.disabled = true;
                 btnElement.innerText = "Aguarde...";
@@ -858,6 +860,7 @@
                             });
                         }
                         const date = new Date().toLocaleString('pt-BR');
+                        reward.lastRedeemed = date;
                         state.history.unshift({ type: 'spend', name: reward.name, points: reward.points, date: date, isShared: false });
                         saveState();
                         render();
@@ -930,6 +933,7 @@
 
         function approveReward(rewardId, btnElement = null) {
             if (!requireLogin()) return;
+            if (!confirm("Tem certeza que deseja aprovar este resgate conjunto?")) return;
             const reward = sharedState.rewards.find(r => String(r.id) === String(rewardId));
             if (!reward) return;
             
@@ -959,7 +963,7 @@
                             history: firebase.firestore.FieldValue.arrayUnion(logEntry)
                         }, { merge: true });
                         
-                        transaction.update(rewardRef, { waitingFor: firebase.firestore.FieldValue.delete() });
+                        transaction.update(rewardRef, { waitingFor: firebase.firestore.FieldValue.delete(), lastRedeemed: date });
                         return true;
                     } else {
                         return Promise.reject("Saldo compartilhado insuficiente no momento da aprovação!");
@@ -1310,6 +1314,7 @@
                     <div class="item-info">
                         <span class="item-title">${reward.name} ${badge}</span>
                         <span class="item-points">-${reward.points} Pts</span>
+                        ${reward.lastRedeemed ? `<div style="font-size: 0.75em; color: var(--text-muted); margin-top: 2px;">Último resgate: ${reward.lastRedeemed}</div>` : ''}
                         ${statusText}
                     </div>
                     <div class="action-group">
