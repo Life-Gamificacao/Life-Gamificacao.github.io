@@ -296,6 +296,23 @@
         </div>
     </div>
 
+    <!-- MODAL DE CONFIRMAÇÃO COM DATA -->
+    <div id="confirmDateModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 3000; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
+        <div style="background: #1a1a1a; padding: 30px; border-radius: 8px; max-width: 350px; width: 100%; border: 1px solid var(--border);">
+            <div style="font-size: 1.5em; margin-bottom: 5px;">✅</div>
+            <h3 style="margin: 0 0 5px 0;" id="confirmDateTitle">Confirmar conclusão</h3>
+            <p style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 15px;" id="confirmDateDesc">Quando você realizou esta tarefa?</p>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="date" id="confirmDateInput" style="flex: 1; padding: 10px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white; font-size: 1em;">
+                <input type="time" id="confirmTimeInput" style="width: 110px; padding: 10px; border-radius: 4px; border: 1px solid var(--border); background: #222; color: white; font-size: 1em;">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirmDateCancel" style="flex: 1; padding: 12px; border-radius: 4px; background: #444; color: white; border: none; cursor: pointer; font-size: 1em;">Cancelar</button>
+                <button id="confirmDateOk" style="flex: 1; padding: 12px; border-radius: 4px; background: var(--accent-green); color: white; border: none; cursor: pointer; font-weight: bold; font-size: 1em;">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- APP PRINCIPAL -->
     <div id="appContent">
         <!-- Menu Lateral -->
@@ -731,6 +748,54 @@
         }
 
         // Ações de Pontuação
+        function showConfirmDateModal(taskName) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmDateModal');
+                const dateInput = document.getElementById('confirmDateInput');
+                const timeInput = document.getElementById('confirmTimeInput');
+                const btnOk = document.getElementById('confirmDateOk');
+                const btnCancel = document.getElementById('confirmDateCancel');
+                const title = document.getElementById('confirmDateTitle');
+                const desc = document.getElementById('confirmDateDesc');
+                
+                title.innerText = "Confirmar: " + taskName;
+                desc.innerText = "Quando você realizou esta tarefa?";
+                
+                // Preencher com data e hora atuais
+                const now = new Date();
+                dateInput.value = now.toISOString().slice(0, 10);
+                timeInput.value = now.toTimeString().slice(0, 5);
+                dateInput.max = now.toISOString().slice(0, 10);
+                
+                modal.style.display = 'flex';
+                
+                function cleanup() {
+                    modal.style.display = 'none';
+                    btnOk.removeEventListener('click', onOk);
+                    btnCancel.removeEventListener('click', onCancel);
+                }
+                
+                function onOk() {
+                    const d = dateInput.value;
+                    const t = timeInput.value;
+                    if (!d || !t) { alert("Preencha a data e a hora."); return; }
+                    const parts = d.split('-');
+                    const chosenDate = new Date(parts[0], parts[1] - 1, parts[2], ...t.split(':'));
+                    const formatted = chosenDate.toLocaleString('pt-BR');
+                    cleanup();
+                    resolve(formatted);
+                }
+                
+                function onCancel() {
+                    cleanup();
+                    resolve(null);
+                }
+                
+                btnOk.addEventListener('click', onOk);
+                btnCancel.addEventListener('click', onCancel);
+            });
+        }
+
         function completeTask(taskId, isShared = false, btnElement = null) {
             if (!requireLogin()) return;
             
@@ -740,92 +805,99 @@
                 btnElement.innerText = "Aguarde...";
             }
             
-            if (!confirm("Tem certeza que concluiu esta tarefa?")) {
-                // Usuário cancelou — reabilitar o botão
-                if (btnElement) {
-                    btnElement.disabled = false;
-                    btnElement.innerText = "Feito";
-                }
-                return;
+            // Buscar o nome da tarefa para exibir no modal
+            let taskName = '';
+            if (isShared) {
+                const t = sharedState.tasks.find(t => String(t.id) === String(taskId));
+                taskName = t ? t.name : 'Tarefa';
+            } else {
+                const t = state.tasks.find(t => String(t.id) === String(taskId));
+                taskName = t ? t.name : 'Tarefa';
             }
             
-            if (isShared) {
-                const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
-                if (task) {
-                    const myEmail = firebase.auth().currentUser.email;
-                    const date = new Date().toLocaleString('pt-BR');
-                    
-                    let currentWaiting = task.waitingFor || task.members.slice();
-                    if (!currentWaiting.includes(myEmail)) {
-                        if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Feito"; }
-                        return;
+            showConfirmDateModal(taskName).then(date => {
+                if (!date) {
+                    // Usuário cancelou
+                    if (btnElement) {
+                        btnElement.disabled = false;
+                        btnElement.innerText = "Feito";
                     }
-                    
-                    task.waitingFor = currentWaiting.filter(email => email !== myEmail);
-                    task.lastCompleted = date;
-                    
-                    // 1. Ganho Individual Imediato
-                    state.totalPoints += task.points;
-                    state.history.unshift({ type: 'earn', name: "Você fez a tarefa " + task.name + " (Ganho individual)", points: task.points, date: date, isShared: false });
-                    saveState();
-                    // NÃO chamar render() aqui — o onSnapshot já fará isso automaticamente
-                    // ao receber a atualização. Chamar render() aqui causa um duplo redesenho
-                    // que pode gerar cliques fantasma sem confirm().
-                    
-                    const taskRef = db.collection('shared_tasks').doc(taskId);
-                    
-                    // 2 e 3. Transação segura no Backend para evitar race conditions
-                    db.runTransaction(transaction => {
-                        return transaction.get(taskRef).then(taskDoc => {
-                            if (!taskDoc.exists) return;
-                            const data = taskDoc.data();
-                            let waitingServer = data.waitingFor || data.members.slice();
-                            
-                            // Previne execução dupla caso a nuvem já tenha processado
-                            if (!waitingServer.includes(myEmail)) return; 
-                            
-                            let newWaitingServer = waitingServer.filter(e => e !== myEmail);
-                            
-                            if (newWaitingServer.length === 0) {
-                                // A dupla concluiu! Deposita no saldo compartilhado.
-                                const balanceId = data.members.slice().sort().join('_');
-                                const balanceRef = db.collection('shared_balances').doc(balanceId);
+                    return;
+                }
+                
+                if (isShared) {
+                    const task = sharedState.tasks.find(t => String(t.id) === String(taskId));
+                    if (task) {
+                        const myEmail = firebase.auth().currentUser.email;
+                        
+                        let currentWaiting = task.waitingFor || task.members.slice();
+                        if (!currentWaiting.includes(myEmail)) {
+                            if (btnElement) { btnElement.disabled = false; btnElement.innerText = "Feito"; }
+                            return;
+                        }
+                        
+                        task.waitingFor = currentWaiting.filter(email => email !== myEmail);
+                        task.lastCompleted = date;
+                        
+                        // 1. Ganho Individual Imediato
+                        state.totalPoints += task.points;
+                        state.history.unshift({ type: 'earn', name: "Você fez a tarefa " + task.name + " (Ganho individual)", points: task.points, date: date, isShared: false });
+                        saveState();
+                        
+                        const taskRef = db.collection('shared_tasks').doc(taskId);
+                        
+                        // 2 e 3. Transação segura no Backend para evitar race conditions
+                        db.runTransaction(transaction => {
+                            return transaction.get(taskRef).then(taskDoc => {
+                                if (!taskDoc.exists) return;
+                                const data = taskDoc.data();
+                                let waitingServer = data.waitingFor || data.members.slice();
                                 
-                                return transaction.get(balanceRef).then(balDoc => {
-                                    const currentBalance = balDoc.exists ? balDoc.data().points : 0;
-                                    const logEntry = { type: 'earn', name: "Ciclo da tarefa " + data.name + " concluído pela dupla! (Ganho compartilhado)", points: data.points, date: date, user: "Dupla", isShared: true };
+                                // Previne execução dupla caso a nuvem já tenha processado
+                                if (!waitingServer.includes(myEmail)) return; 
+                                
+                                let newWaitingServer = waitingServer.filter(e => e !== myEmail);
+                                
+                                if (newWaitingServer.length === 0) {
+                                    // A dupla concluiu! Deposita no saldo compartilhado.
+                                    const balanceId = data.members.slice().sort().join('_');
+                                    const balanceRef = db.collection('shared_balances').doc(balanceId);
                                     
-                                    transaction.set(balanceRef, {
-                                        points: currentBalance + data.points,
-                                        members: data.members,
-                                        history: firebase.firestore.FieldValue.arrayUnion(logEntry)
-                                    }, { merge: true });
-                                    
-                                    transaction.update(taskRef, {
-                                        waitingFor: data.members,
-                                        completions: (data.completions || 0) + 1,
-                                        lastCompleted: date
+                                    return transaction.get(balanceRef).then(balDoc => {
+                                        const currentBalance = balDoc.exists ? balDoc.data().points : 0;
+                                        const logEntry = { type: 'earn', name: "Ciclo da tarefa " + data.name + " concluído pela dupla! (Ganho compartilhado)", points: data.points, date: date, user: "Dupla", isShared: true };
+                                        
+                                        transaction.set(balanceRef, {
+                                            points: currentBalance + data.points,
+                                            members: data.members,
+                                            history: firebase.firestore.FieldValue.arrayUnion(logEntry)
+                                        }, { merge: true });
+                                        
+                                        transaction.update(taskRef, {
+                                            waitingFor: data.members,
+                                            completions: (data.completions || 0) + 1,
+                                            lastCompleted: date
+                                        });
                                     });
-                                });
-                            } else {
-                                // Alguém ainda não fez, apenas atualiza a fila
-                                transaction.update(taskRef, { waitingFor: newWaitingServer, lastCompleted: date });
-                            }
-                        });
-                    }).catch(err => console.error("Erro ao sincronizar tarefa: ", err));
+                                } else {
+                                    // Alguém ainda não fez, apenas atualiza a fila
+                                    transaction.update(taskRef, { waitingFor: newWaitingServer, lastCompleted: date });
+                                }
+                            });
+                        }).catch(err => console.error("Erro ao sincronizar tarefa: ", err));
+                    }
+                } else {
+                    const task = state.tasks.find(t => String(t.id) === String(taskId));
+                    if (task) {
+                        state.totalPoints += task.points;
+                        task.completions = (task.completions || 0) + 1;
+                        task.lastCompleted = date;
+                        state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date, isShared: false });
+                        saveState();
+                        render();
+                    }
                 }
-            } else {
-                const task = state.tasks.find(t => String(t.id) === String(taskId));
-                if (task) {
-                    state.totalPoints += task.points;
-                    task.completions = (task.completions || 0) + 1;
-                    const date = new Date().toLocaleString('pt-BR');
-                    task.lastCompleted = date;
-                    state.history.unshift({ type: 'earn', name: task.name, points: task.points, date: date, isShared: false });
-                    saveState();
-                    render();
-                }
-            }
+            });
         }
 
         function redeemReward(rewardId, isShared = false, btnElement = null) {
