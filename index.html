@@ -733,11 +733,20 @@
         // Ações de Pontuação
         function completeTask(taskId, isShared = false, btnElement = null) {
             if (!requireLogin()) return;
-            if (!confirm("Tem certeza que concluiu esta tarefa?")) return;
             
+            // Desabilitar o botão IMEDIATAMENTE para impedir cliques duplos
             if (btnElement) {
                 btnElement.disabled = true;
                 btnElement.innerText = "Aguarde...";
+            }
+            
+            if (!confirm("Tem certeza que concluiu esta tarefa?")) {
+                // Usuário cancelou — reabilitar o botão
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerText = "Feito";
+                }
+                return;
             }
             
             if (isShared) {
@@ -759,7 +768,9 @@
                     state.totalPoints += task.points;
                     state.history.unshift({ type: 'earn', name: "Você fez a tarefa " + task.name + " (Ganho individual)", points: task.points, date: date, isShared: false });
                     saveState();
-                    render();
+                    // NÃO chamar render() aqui — o onSnapshot já fará isso automaticamente
+                    // ao receber a atualização. Chamar render() aqui causa um duplo redesenho
+                    // que pode gerar cliques fantasma sem confirm().
                     
                     const taskRef = db.collection('shared_tasks').doc(taskId);
                     
